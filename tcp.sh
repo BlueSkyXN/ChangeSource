@@ -44,8 +44,8 @@ installbbr(){
 			if [[ ${bit} = "x86_64" ]]; then
 				kernel_version="5.10.2"
 				detele_kernel_head
-				wget -N -O kernel-headers-c7.rpm https://iks.cnzz.com.a.bdydns.com/onedrivecn/mirror/kernel/CentOS/7/kernel-headers-5.10.2-1.x86_64.rpm
-				wget -N -O kernel-c7.rpm https://iks.cnzz.com.a.bdydns.com/onedrivecn/mirror/kernel/CentOS/7/kernel-5.10.2-1.x86_64.rpm
+				wget -N -O kernel-headers-c7.rpm https://blueskyxn-my.sharepoint.com/personal/photo_000714_xyz/_layouts/52/download.aspx?share=EeXhBrbAkqRGnm9zfc2nVlYBssfnbzsDt-cbbz9hAMQVxQ
+				wget -N -O kernel-c7.rpm https://blueskyxn-my.sharepoint.com/personal/photo_000714_xyz/_layouts/52/download.aspx?share=EcZqLBAcKYJOigxb3fQkhmEBeccHRmm_cmc3HCklMQPeKw
 				
 				yum install -y kernel-c7.rpm
 				yum install -y kernel-headers-c7.rpm
@@ -56,8 +56,8 @@ installbbr(){
 		elif [[ ${version} = "8" ]]; then
 			kernel_version="5.6.15"
 			detele_kernel_head
-			wget -N -O kernel-c8.rpm https://chinagz2018-my.sharepoint.com/:u:/g/personal/ylx_chinagz2018_onmicrosoft_com/ETadaTIeeQJCgxEXKlOFiCEBsBa-Y15QbDkv-HQGo2EHSQ?download=1
-			wget -N -O kernel-headers-c8.rpm https://chinagz2018-my.sharepoint.com/:u:/g/personal/ylx_chinagz2018_onmicrosoft_com/EZEZyLBjDplMgSqDzyaqkvYBW06OOKDCcIQq27381fa5-A?download=1
+			wget -N -O kernel-c8.rpm https://blueskyxn-my.sharepoint.com/personal/photo_000714_xyz/_layouts/52/download.aspx?share=EVt72uKEjBxHqapod-jAOM0B7TjmlgfzhsoKw14JwtU6Vw
+			wget -N -O kernel-headers-c8.rpm https://blueskyxn-my.sharepoint.com/personal/photo_000714_xyz/_layouts/52/download.aspx?share=EY0Vv5WPOcVOtgTKO93ryGYB3pMHp-Aj6ixuzB4bxZ6lpw
 
 			yum install -y kernel-c8.rpm
 			yum install -y kernel-headers-c8.rpm
@@ -67,8 +67,8 @@ installbbr(){
 		if [[ ${bit} = "x86_64" ]]; then
 			kernel_version="5.10.2"
 			detele_kernel_head
-			wget -N -O linux-headers-d10.deb https://iks.cnzz.com.a.bdydns.com/onedrivecn/mirror/kernel/Debian/9/linux-headers-5.10.2.deb
-			wget -N -O linux-image-d10.deb https://iks.cnzz.com.a.bdydns.com/onedrivecn/mirror/kernel/Debian/9/linux-image-5.10.2.deb
+			wget -N -O linux-headers-d10.deb https://blueskyxn-my.sharepoint.com/personal/photo_000714_xyz/_layouts/52/download.aspx?share=EWsSKlSBmnxFlUTXJs-4Bm4Bnm0dmqgZFI_FSih5N-YlNA
+			wget -N -O linux-image-d10.deb https://blueskyxn-my.sharepoint.com/personal/photo_000714_xyz/_layouts/52/download.aspx?share=EdZeEQMpMctAsfBcjVV2RpsBmisCt_ZRjhtoKazRUmT3hg
 				
 			dpkg -i linux-image-d10.deb
 			dpkg -i linux-headers-d10.deb
