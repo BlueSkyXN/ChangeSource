@@ -5,9 +5,10 @@ export PATH
 #=================================================
 #	System Required: CentOS 6/7/8,Debian 8/9/10,ubuntu 16/18/19
 #	Description: BBR+BBRplus+Lotserver
-#	Version: 1.3.2.62
-#	Author: 千影,cx9208,YLX
+#	Version: 1.3.2.62-BBR换源版
+#	Author: 千影,cx9208,YLX，BlueSkyXN
 #	更新内容及反馈:  https://blog.ylx.me/archives/783.html
+#       BlueSkyXN：https://www.blueskyxn.com/
 #=================================================
 
 sh_ver="1.3.2.62"
@@ -1043,19 +1044,19 @@ gotodd(){
 start_menu(){
 clear
 echo && echo -e " TCP加速 一键安装管理脚本 ${Red_font_prefix}[v${sh_ver}]${Font_color_suffix}
- 更新内容及反馈:  https://blog.ylx.me/archives/783.html 运行./tcp.sh再次调用本脚本 母鸡慎用
- ${Green_font_prefix}0.${Font_color_suffix} 升级脚本
+ 更新内容及反馈:  https://www.blueskyxn.com 运行./tcp.sh再次调用本脚本 母鸡慎用
+ ${Green_font_prefix}0.${Font_color_suffix} 升级脚本【会切到原作者版本哦】
  ${Green_font_prefix}9.${Font_color_suffix} 切换到不卸载内核版本
  ${Green_font_prefix}10.${Font_color_suffix} 切换到一键DD安装系统脚本 自负其责 新手勿入 
 ————————————内核管理————————————
- ${Green_font_prefix}1.${Font_color_suffix} 安装 BBR原版内核 - 5.6.15/5.10.2
+ ${Green_font_prefix}1.${Font_color_suffix} 安装 BBR原版内核 - 5.6.15/5.10.2 - 【推荐】已换源
  ${Green_font_prefix}2.${Font_color_suffix} 安装 BBRplus版内核 - 4.14.129
  ${Green_font_prefix}3.${Font_color_suffix} 安装 Lotserver(锐速)内核 - 多种
  ${Green_font_prefix}4.${Font_color_suffix} 安装 xanmod版内核 - 5.5.1/5.10.3
  ${Green_font_prefix}5.${Font_color_suffix} 安装 BBR2测试版内核 - 5.4.0
  ${Green_font_prefix}7.${Font_color_suffix} 安装 BBRplus新版内核 - 4.14.182
 ————————————加速管理————————————
- ${Green_font_prefix}11.${Font_color_suffix} 使用BBR+FQ加速
+ ${Green_font_prefix}11.${Font_color_suffix} 使用BBR+FQ加速【推荐】
  ${Green_font_prefix}12.${Font_color_suffix} 使用BBR+CAKE加速 
  ${Green_font_prefix}13.${Font_color_suffix} 使用BBRplus+FQ版加速
  ${Green_font_prefix}14.${Font_color_suffix} 使用Lotserver(锐速)加速
@@ -1067,7 +1068,7 @@ echo && echo -e " TCP加速 一键安装管理脚本 ${Red_font_prefix}[v${sh_ve
 ————————————杂项管理————————————
  ${Green_font_prefix}21.${Font_color_suffix} 卸载全部加速
  ${Green_font_prefix}22.${Font_color_suffix} 系统配置优化
- ${Green_font_prefix}24.${Font_color_suffix} 应用johnrosen1的优化方案
+ ${Green_font_prefix}24.${Font_color_suffix} 应用johnrosen1的优化方案【推荐】
  ${Green_font_prefix}23.${Font_color_suffix} 退出脚本 
 ————————————————————————————————" && echo
 
