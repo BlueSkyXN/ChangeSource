@@ -56,9 +56,8 @@ out0 () {
 # if [ ! $# -eq 0 ];then
 #     id=$1
 # fi
-out0 s "使用方法: wget vpstest.cn/it && bash it 或 wget git.io/vpstest && bash vpstest\n"
-out0 r "7,4 已修复，请清空残余文件后使用\n"
-out0 b "添加sysbench脚本\n"
+out0 s "wget -N --no-check-certificate "https://raw.githubusercontent.com/BlueSkyXN/ChangeSource/master/tools.sh" && chmod +x tools.sh && ./tools.sh\n"
+out0 r "脚本会自动清理垃圾和本体\n"
 while [ 1 -eq 1 ];do
 out1 y "-------------------------------\n"
 out1 y "|"
