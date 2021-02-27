@@ -56,8 +56,8 @@ out0 () {
 # if [ ! $# -eq 0 ];then
 #     id=$1
 # fi
-out0 s "wget -N --no-check-certificate "https://raw.githubusercontent.com/BlueSkyXN/ChangeSource/master/tools.sh" && chmod +x tools.sh && ./tools.sh\n"
-out0 r "脚本会自动清理垃圾和本体\n"
+out0 s "wget -qO box.sh https://raw.githubusercontent.com/BlueSkyXN/ChangeSource/master/box.sh && sudo bash box.sh\n"
+out0 r "脚本会自动清理垃圾\n"
 while [ 1 -eq 1 ];do
 out1 y "-------------------------------\n"
 out1 y "|"
