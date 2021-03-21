@@ -1,5 +1,4 @@
 #!/bin/bash
-shell_version="1.2";
 UA_Browser="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.87 Safari/537.36";
 UA_Dalvik="Dalvik/2.1.0 (Linux; U; Android 9; ALP-AL00 Build/HUAWEIALP-AL00)";
 Font_Black="\033[30m";
@@ -16,10 +15,7 @@ export LANG="en_US";
 export LANGUAGE="en_US";
 export LC_ALL="en_US";
 clear;
-echo -e "${Font_Red}反馈 https://t.me/zerocloud${Font_Suffix}";
-echo -e "${Font_Red}声明 本测试工具根据GPL V3协议开源，严禁倒卖${Font_Suffix}";
-echo -e "${Font_Red}提示 本工具测试结果仅供参考，请以实际使用为准${Font_Suffix}";
-echo -e " ** Version: v${shell_version}";
+echo -e "${Font_Red}反馈 https://github.com/BlueSkyXN/ChangeSource${Font_Suffix}";
 
 function PharseJSON() {
     # 使用方法: PharseJSON "要解析的原JSON文本" "要解析的键值"
