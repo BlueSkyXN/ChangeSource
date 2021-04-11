@@ -1,5 +1,5 @@
-sudo wget -O "/usr/bin/rclone" "https://objectstorage.me-dubai-1.oraclecloud.com/n/axdoh51w1xdx/b/GIT/o/rclone"
-sudo wget -O "/usr/bin/fclone" "https://objectstorage.me-dubai-1.oraclecloud.com/n/axdoh51w1xdx/b/GIT/o/fclone"
+sudo wget -O "/usr/bin/rclone" "https://objectstorage.us-sanjose-1.oraclecloud.com/n/ax3knnoie6uq/b/OSS-GIT/o/rclone"
+sudo wget -O "/usr/bin/fclone" "https://objectstorage.us-sanjose-1.oraclecloud.com/n/ax3knnoie6uq/b/OSS-GIT/o/fclone"
 sudo chmod +x "/usr/bin/rclone"
 sudo chmod +x "/usr/bin/fclone"
 sudo chmod 777 "/usr/bin/rclone"
