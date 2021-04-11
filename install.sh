@@ -13,4 +13,7 @@ chmod 777 "/root/tcp.sh"
 wget -O "/root/mt.sh" "https://objectstorage.us-sanjose-1.oraclecloud.com/n/ax3knnoie6uq/b/OSS-GIT/o/mt.sh" --no-check-certificate -T 30 -t 5 -d
 chmod +x "/root/mt.sh"
 chmod 777 "/root/mt.sh"
+wget -O "/root/bbr.sh" "https://objectstorage.us-sanjose-1.oraclecloud.com/n/ax3knnoie6uq/b/OSS-GIT/o/bbr.sh" --no-check-certificate -T 30 -t 5 -d
+chmod +x "/root/bbr.sh"
+chmod 777 "/root/bbr.sh"
 clear
