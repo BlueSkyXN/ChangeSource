@@ -162,6 +162,7 @@ sysctl -p
 
 #MT.SH 流媒体解锁测试
 function mtsh(){
+yum -y install jq
 wget -O "/root/mt.sh" "https://raw.githubusercontent.com/BlueSkyXN/ChangeSource/master/mt.sh" --no-check-certificate -T 30 -t 5 -d
 chmod +x "/root/mt.sh"
 chmod 777 "/root/mt.sh"
