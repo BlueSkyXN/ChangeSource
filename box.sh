@@ -162,7 +162,24 @@ sysctl -p
 
 #MT.SH 流媒体解锁测试
 function mtsh(){
-yum -y install jq
+        #安装JQ
+	if [ -e "/etc/redhat-release" ];then
+	yum install epel-release -y -q > /dev/null;
+	yum install jq -y -q > /dev/null;
+	elif [[ $(cat /etc/os-release | grep '^ID=') =~ ubuntu ]] || [[ $(cat /etc/os-release | grep '^ID=') =~ debian ]];then
+	apt-get update -y > /dev/null;
+	apt-get install jq > /dev/null;
+	else 
+	echo -e "${Font_Red}请手动安装jq${Font_Suffix}";
+	exit;
+	fi
+
+        jq -V > /dev/null 2>&1;
+        if [ $? -ne 0 ];then
+	echo -e "${Font_Red}请手动安装jq${Font_Suffix}";
+	exit;
+        fi
+
 wget -O "/root/mt.sh" "https://raw.githubusercontent.com/BlueSkyXN/ChangeSource/master/mt.sh" --no-check-certificate -T 30 -t 5 -d
 chmod +x "/root/mt.sh"
 chmod 777 "/root/mt.sh"

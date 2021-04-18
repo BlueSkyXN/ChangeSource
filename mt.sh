@@ -1,4 +1,5 @@
 #!/bin/bash
+shell_version="1.3.2";
 UA_Browser="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.87 Safari/537.36";
 UA_Dalvik="Dalvik/2.1.0 (Linux; U; Android 9; ALP-AL00 Build/HUAWEIALP-AL00)";
 Font_Black="\033[30m";
@@ -14,9 +15,33 @@ Font_Suffix="\033[0m";
 export LANG="en_US";
 export LANGUAGE="en_US";
 export LC_ALL="en_US";
-clear;
-echo -e "${Font_Red}反馈 https://github.com/BlueSkyXN/ChangeSource${Font_Suffix}";
 
+clear;
+echo -e "${Font_Red}项目地址 https://github.com/CoiaPrant/MediaUnlock_Test ${Font_Suffix}";
+echo -e "${Font_Red}反馈 https://t.me/CoiaPrant${Font_Suffix}";
+echo -e "${Font_Red}声明 本测试工具根据GPL V3协议开源，严禁倒卖${Font_Suffix}";
+echo -e "${Font_Red}提示 本工具测试结果仅供参考，请以实际使用为准${Font_Suffix}";
+echo -e " ** Version: v${shell_version}";
+
+function InstallJQ() {
+	#安装JQ
+	if [ -e "/etc/redhat-release" ];then
+	yum install epel-release -y -q > /dev/null;
+	yum install jq -y -q > /dev/null;
+	elif [[ $(cat /etc/os-release | grep '^ID=') =~ ubuntu ]] || [[ $(cat /etc/os-release | grep '^ID=') =~ debian ]];then
+	apt-get update -y > /dev/null;
+	apt-get install jq > /dev/null;
+	else 
+	echo -e "${Font_Red}请手动安装jq${Font_Suffix}";
+	exit;
+	fi
+
+        jq -V > /dev/null 2>&1;
+        if [ $? -ne 0 ];then
+	echo -e "${Font_Red}请手动安装jq${Font_Suffix}";
+	exit;
+        fi
+}
 function PharseJSON() {
     # 使用方法: PharseJSON "要解析的原JSON文本" "要解析的键值"
     # Example: PharseJSON ""Value":"123456"" "Value" [返回结果: 123456]
@@ -38,7 +63,7 @@ function MediaUnlockTest_HBONow() {
         fi
     else
         # 下载页面失败，返回错误代码
-        echo -e "\r HBO Now:\t\t\t\t${Font_Yellow}Failed (Network Connection)${Font_Suffix}\n";
+        echo -e "\r HBO Now:\t\t\t\t${Font_Red}Failed (Network Connection)${Font_Suffix}\n";
     fi
 }
 
@@ -99,7 +124,7 @@ function MediaUnlockTest_BilibiliChinaMainland() {
 
 # 流媒体解锁测试-哔哩哔哩港澳台限定
 function MediaUnlockTest_BilibiliHKMCTW() {
-    echo -n -e " BiliBili Hongkong/Macau/Taiwan:\t->\c";
+    echo -n -e " BiliBili HongKong/Macau/Taiwan:\t->\c";
     local randsession="$(cat /dev/urandom | head -n 32 | md5sum | head -c 32)";
     # 尝试获取成功的结果
     local result=`curl --user-agent "${UA_Browser}" -${1} -fsSL --max-time 30 "https://api.bilibili.com/pgc/player/web/playurl?avid=18281381&cid=29892777&qn=0&type=&otype=json&ep_id=183799&fourk=1&fnver=0&fnval=16&session=${randsession}&module=bangumi" 2>&1`;
@@ -107,17 +132,17 @@ function MediaUnlockTest_BilibiliHKMCTW() {
         local result="$(PharseJSON "${result}" "code")";
         if [ "$?" = "0" ]; then
             if [ "${result}" = "0" ]; then
-                echo -n -e "\r BiliBili Hongkong/Macau/Taiwan:\t${Font_Green}Yes${Font_Suffix}\n";
+                echo -n -e "\r BiliBili HongKong/Macau/Taiwan:\t${Font_Green}Yes${Font_Suffix}\n";
                 elif [ "${result}" = "-10403" ]; then
-                echo -n -e "\r BiliBili Hongkong/Macau/Taiwan:\t${Font_Red}No${Font_Suffix}\n";
+                echo -n -e "\r BiliBili HongKong/Macau/Taiwan:\t${Font_Red}No${Font_Suffix}\n";
             else
-                echo -n -e "\r BiliBili Hongkong/Macau/Taiwan:\t${Font_Red}Failed${Font_Suffix} ${Font_SkyBlue}(${result})${Font_Suffix}\n";
+                echo -n -e "\r BiliBili HongKong/Macau/Taiwan:\t${Font_Red}Failed${Font_Suffix} ${Font_SkyBlue}(${result})${Font_Suffix}\n";
             fi
         else
-            echo -n -e "\r BiliBili Hongkong/Macau/Taiwan:\t${Font_Red}Failed (Parse Json)${Font_Suffix}\n";
+            echo -n -e "\r BiliBili HongKong/Macau/Taiwan:\t${Font_Red}Failed (Parse Json)${Font_Suffix}\n";
         fi
     else
-        echo -n -e "\r BiliBili Hongkong/Macau/Taiwan:\t${Font_Red}Failed (Network Connection)${Font_Suffix}\n";
+        echo -n -e "\r BiliBili HongKong/Macau/Taiwan:\t${Font_Red}Failed (Network Connection)${Font_Suffix}\n";
     fi
 }
 
@@ -141,14 +166,14 @@ function MediaUnlockTest_BilibiliTW() {
             echo -n -e "\r Bilibili Taiwan Only:\t\t\t${Font_Red}Failed (Parse Json)${Font_Suffix}\n";
         fi
     else
-        echo -n -e "\r 哔哩哔哩-台湾限定:\t${Font_Red}Failed (Network Connection)${Font_Suffix}\n";
+        echo -n -e "\r Bilibili Taiwan Only:\t\t\t${Font_Red}Failed (Network Connection)${Font_Suffix}\n";
     fi
 }
 
 # 流媒体解锁测试-Abema.TV
 #
 function MediaUnlockTest_AbemaTV_IPTest() {
-    echo -n -e " Abema.TV:\t\t\t\t\c";
+    echo -n -e " Abema.TV:\t\t\t\t->\c";
     #
     local result=`curl --user-agent "${UA_Dalvik}" -${1} -fsL --write-out %{http_code} --max-time 30 "https://api.abema.io/v1/ip/check?device=android"`;
     if [[ "$result" == "000" ]]; then
@@ -171,7 +196,7 @@ function MediaUnlockTest_AbemaTV_IPTest() {
 }
 
 function MediaUnlockTest_PCRJP() {
-    echo -n -e " Princess Connect Re:Dive Japan:\t\c";
+    echo -n -e " Princess Connect Re:Dive Japan:\t->\c";
     # 测试，连续请求两次 (单独请求一次可能会返回35, 第二次开始变成0)
     local result=`curl --user-agent "${UA_Dalvik}" -${1} -fsL --write-out %{http_code} --output /dev/null --max-time 30 https://api-priconne-redive.cygames.jp/`;
     if [ "$result" = "000" ]; then
@@ -186,7 +211,7 @@ function MediaUnlockTest_PCRJP() {
 }
 
 function MediaUnlockTest_BBC() {
-    echo -n -e " BBC:\t\t\t\t\t\c";
+    echo -n -e " BBC:\t\t\t\t\t->\c";
     local result=`curl --user-agent "${UA_Browser}" -${1} -fsL --write-out %{http_code} --output /dev/null --max-time 30 http://ve-dash-uk.live.cf.md.bbci.co.uk/`;
     if [ "${result}" = "000" ]; then
         echo -n -e "\r BBC:\t\t\t\t\t${Font_Red}Failed (Network Connection)${Font_Suffix}\n";
@@ -200,7 +225,7 @@ function MediaUnlockTest_BBC() {
 }
 
 function MediaUnlockTest_Netflix() {
-    echo -n -e " Netflix:\t\t\t\t\c";
+    echo -n -e " Netflix:\t\t\t\t->\c";
     local result=`curl -${1} --user-agent "${UA_Browser}" -sSL "https://www.netflix.com/" 2>&1`;
     if [ "$result" == "Not Available" ];then
         echo -n -e "\r Netflix:\t\t\t\t${Font_Red}Unsupport${Font_Suffix}\n"
@@ -230,16 +255,36 @@ function MediaUnlockTest_Netflix() {
         return;
     fi
     
-    local region=`tr [:lower:] [:upper:] <<< $(curl -${1} --user-agent "${UA_Browser}" -is "https://www.netflix.com/title/80018499" 2>&1 | grep -i "location" | awk '{print $2}' | cut -d '/' -f4 | cut -d '-' -f1)` ;
+    local region=`tr [:lower:] [:upper:] <<< $(curl -${1} --user-agent "${UA_Browser}" -fs --write-out %{redirect_url} --output /dev/null "https://www.netflix.com/title/80018499" | cut -d '/' -f4 | cut -d '-' -f1)` ;
     
-    if [[ "$region" == *"INDEX"* ]];then
+    if [[ ! -n "$region" ]];then
         region="US";
     fi
     echo -n -e "\r Netflix:\t\t\t\t${Font_Green}Yes(Region: ${region})${Font_Suffix}\n"
     return;
 }
 
+function MediaUnlockTest_YouTube_Region() {
+    echo -n -e " YouTube Region:\t\t\t->\c";
+    local result=`curl --user-agent "${UA_Browser}" -${1} -sSL "https://www.youtube.com/" 2>&1`;
+    
+    if [[ "$result" == "curl"* ]];then
+        echo -n -e "\r YouTube Region:\t\t\t${Font_Red}Failed (Network Connection)${Font_Suffix}\n";
+        return;
+    fi
+    
+    local result=`curl --user-agent "${UA_Browser}" -${1} -sL "https://www.youtube.com/red" | sed 's/,/\n/g' | grep "countryCode" | cut -d '"' -f4`;
+    if [ -n "$result" ]; then
+        echo -n -e "\r YouTube Region:\t\t\t${Font_Green}${result}${Font_Suffix}\n";
+        return;
+    fi
+    
+    echo -n -e "\r YouTube Region:\t\t\t${Font_Red}No${Font_Suffix}\n";
+    return;
+}
+
 function MediaUnlockTest_DisneyPlus() {
+    echo -n -e " DisneyPlus:\t\t\t\t->\c";
     local result=`curl -${1} --user-agent "${UA_Browser}" -sSL "https://www.disneyplus.com/movies/drain-the-titanic/5VNZom2KYtlb" 2>&1`;
     
     if [[ "$result" == "curl"* ]];then
@@ -271,6 +316,7 @@ function MediaUnlockTest() {
     MediaUnlockTest_BilibiliHKMCTW ${1};
     MediaUnlockTest_BilibiliTW ${1};
     MediaUnlockTest_Netflix ${1};
+    MediaUnlockTest_YouTube_Region ${1};
     MediaUnlockTest_DisneyPlus ${1};
 }
 
@@ -282,8 +328,7 @@ fi
 
 jq -V > /dev/null 2>&1;
 if [ $? -ne 0 ];then
-    echo -e "${Font_Red}Please install jq${Font_Suffix}";
-    exit;
+   InstallJQ;
 fi
 echo " ** 正在测试IPv4解锁情况";
 check4=`ping 1.1.1.1 -c 1 2>&1`;
