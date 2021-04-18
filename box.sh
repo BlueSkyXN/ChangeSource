@@ -508,7 +508,6 @@ function start_menu(){
         * )
             clear
             red "请输入正确数字 !"
-            sleep 2s
             start_menu
         ;;
     esac
