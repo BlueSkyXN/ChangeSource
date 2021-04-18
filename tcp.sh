@@ -1018,7 +1018,7 @@ Update_Shell(){
 		fi
 	else
 		echo -e "当前已是最新版本[ ${sh_new_ver} ] !"
-		sleep 2s && ./tcp.sh
+		sleep 1s && ./tcp.sh
 	fi
 }
 
@@ -1157,7 +1157,7 @@ case "$num" in
 	*)
 	clear
 	echo -e "${Error}:请输入正确数字 [0-23]"
-	sleep 5s
+	sleep 1s
 	start_menu
 	;;
 esac
