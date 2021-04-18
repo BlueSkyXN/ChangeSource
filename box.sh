@@ -368,6 +368,15 @@ blue "你也可以输入 bash /root/yum-git.sh 来手动运行"
 bash "/root/yum-git.sh"
 }
 
+#BBR管理脚本
+function tcpsh(){
+wget -O "/root/tcp.sh" "https://raw.githubusercontent.com/BlueSkyXN/ChangeSource/master/tcp.sh" --no-check-certificate -T 30 -t 5 -d
+chmod +x "/root/tcp.sh"
+chmod 777 "/root/tcp.sh"
+blue "下载完成"
+blue "你也可以输入 bash /root/tcp.sh 来手动运行"
+bash "/root/tcp.sh"
+}
 
 
 
@@ -393,6 +402,7 @@ function start_menu(){
     green " 14. 系统网络配置优化"
     green " 15. Git 新版 安装"
     green " 16. 宝塔面板 自动磁盘挂载工具"
+    green " 17. BBR管理脚本" 
     yellow " --------------------------------------------------"
     green " 21. Superbench 综合测试"
     green " 22. MT.SH 流媒体解锁测试"
@@ -455,6 +465,9 @@ function start_menu(){
 	;;
 	16 )
            btdisk
+	;;
+	17 )
+           tcpsh
 	;;
 	21 )
            superbench
