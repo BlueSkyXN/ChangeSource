@@ -376,6 +376,8 @@ function start_menu(){
     clear
     red " BlueSkyXN  综合工具箱" 
     red " CentOS·YUM Supported ONLY" 
+    green " https://github.com/BlueSkyXN "
+    green " https://www.blueskyxn.com "
     yellow " =================================================="
     green " 1. IPV.SH ipv4/6优先级调整一键脚本·下载" 
     green " 2. IPT.SH iptable一键脚本"
