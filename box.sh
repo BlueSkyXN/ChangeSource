@@ -390,6 +390,7 @@ function start_menu(){
     echo
     green " 31. MTP&TLS 一键脚本"
     green " 32. V2UI 一键脚本"
+    green " 33. Aria2 最强安装与管理脚本"
     echo
     yellow " --------------------------------------------------"
     echo
@@ -427,68 +428,71 @@ function start_menu(){
 	7 )
            nezha
 	;;
-	8 )
+	11 )
            getip
 	;;
-	9 )
+	12 )
            bbrnew
 	;;
-	10 )
+	13 )
            bbrfq
 	;;
-	11 )
+	14 )
            system-best
 	;;
-	12 )
+	15 )
            yumgitsh
 	;;
-	13 )
+	16 )
            btdisk
 	;;
-	14 )
+	21 )
            superbench
 	;;
-	15 )
+	22 )
            mtsh
 	;;
-	16 )
+	23 )
            Lemonbench
 	;;
-	17 )
+	24 )
            UNIXbench
 	;;
-	18 )
+	25 )
            3speed
 	;;
-	19 )
+	26 )
            memorytest
 	;;
-	20 )
+	31 )
            mtp
 	;;
-	21 )
-           speedtest-linux
+	32 )
+           v2ui
 	;;
-	22 )
-           speedtest-linux
+        33 )
+           aria
 	;;
-	23 )
-           speedtest-linux
+	41 )
+           btnew
 	;;
-	24 )
-           speedtest-linux
+	42 )
+           btrenew
 	;;
-	25 )
-           speedtest-linux
+	43 )
+           btold
 	;;
-	26 )
-           speedtest-linux
+	44 )
+           bthostcli
 	;;
-	27 )
-           speedtest-linux
+	45 )
+           bthostcli-new
 	;;
-	28 )
-           speedtest-linux
+	46 )
+           lt
+	;;
+	47 )
+           lt-new
 	;;
         0 )
             exit 1
