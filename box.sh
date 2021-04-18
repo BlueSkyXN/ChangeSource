@@ -350,6 +350,9 @@ blue "你也可以输入 bash /root/yum-git.sh 来手动运行"
 bash "/root/yum-git.sh"
 }
 
+
+
+
 #主菜单
 function start_menu(){
     clear
@@ -367,36 +370,36 @@ function start_menu(){
     echo
     yellow " --------------------------------------------------"
     echo
-    green " 8. 获取本机IP"
-    green " 9. 安装最新BBR内核·使用YUM" 
-    green " 10. 启动BBR FQ算法"
-    green " 11. 系统网络配置优化"
-    green " 12. 获取本机IP"
-    green " 13. Git 新版 安装"
-    green " 14. 宝塔面板 自动磁盘挂载工具"
+    green " 11. 获取本机IP"
+    green " 12. 安装最新BBR内核·使用YUM" 
+    green " 13. 启动BBR FQ算法"
+    green " 14. 系统网络配置优化"
+    green " 15. Git 新版 安装"
+    green " 16. 宝塔面板 自动磁盘挂载工具"
     echo
     yellow " --------------------------------------------------"
     echo
-    green " 15. MT.SH 流媒体解锁测试"
-    green " 16. Lemonbench 综合测试"
-    green " 17. UNIXbench 综合测试"
-    green " 18. 三网Speedtest测速"
-    green " 19. Memorytest 内存压力测试"
+    green " 21. Superbench 综合测试"
+    green " 22. MT.SH 流媒体解锁测试"
+    green " 23. Lemonbench 综合测试"
+    green " 24. UNIXbench 综合测试"
+    green " 25. 三网Speedtest测速"
+    green " 26. Memorytest 内存压力测试"
     echo
     yellow " --------------------------------------------------"
     echo
-    green " 20. MTP&TLS 一键脚本"
-    green " 21. V2UI 一键脚本"
+    green " 31. MTP&TLS 一键脚本"
+    green " 32. V2UI 一键脚本"
     echo
     yellow " --------------------------------------------------"
     echo
-    green " 22. 宝塔面板 官方版·一键安装"
-    green " 23. 宝塔面板 官方版·一键更新"
-    green " 24. 宝塔面板 5.9开源免费版·一键安装"
-    green " 25. 宝塔面板 Hostcli 破解版·一键安装"
-    green " 26. 宝塔面板 Hostcli 破解版·一键转移"
-    green " 27. 莉塔面板·一键安装（安装后需要更新一下）"
-    green " 28. 莉塔面板·一键更新（安装后需要更新一下）"
+    green " 41. 宝塔面板 官方版·一键安装"
+    green " 42. 宝塔面板 官方版·一键更新"
+    green " 43. 宝塔面板 5.9开源免费版·一键安装"
+    green " 44. 宝塔面板 Hostcli 破解版·一键安装"
+    green " 45. 宝塔面板 Hostcli 破解版·一键转移"
+    green " 46. 莉塔面板·一键安装（安装后需要更新一下）"
+    green " 47. 莉塔面板·一键更新（安装后需要更新一下）"
     echo
     green " =================================================="
     green " 0. 退出脚本"
@@ -410,7 +413,82 @@ function start_menu(){
            iptsh
 	;;
         3 )
-           iptsh
+           speedtest-linux
+	;;
+        4 )
+           clonesh
+	;;
+        5 )
+           cssh
+	;;
+	6 )
+           gettrace
+	;;
+	7 )
+           nezha
+	;;
+	8 )
+           getip
+	;;
+	9 )
+           bbrnew
+	;;
+	10 )
+           bbrfq
+	;;
+	11 )
+           system-best
+	;;
+	12 )
+           yumgitsh
+	;;
+	13 )
+           btdisk
+	;;
+	14 )
+           superbench
+	;;
+	15 )
+           mtsh
+	;;
+	16 )
+           Lemonbench
+	;;
+	17 )
+           UNIXbench
+	;;
+	18 )
+           3speed
+	;;
+	19 )
+           memorytest
+	;;
+	20 )
+           mtp
+	;;
+	21 )
+           speedtest-linux
+	;;
+	22 )
+           speedtest-linux
+	;;
+	23 )
+           speedtest-linux
+	;;
+	24 )
+           speedtest-linux
+	;;
+	25 )
+           speedtest-linux
+	;;
+	26 )
+           speedtest-linux
+	;;
+	27 )
+           speedtest-linux
+	;;
+	28 )
+           speedtest-linux
 	;;
         0 )
             exit 1
