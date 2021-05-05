@@ -1,0 +1,295 @@
+#!/bin/bash
+#
+# https://github.com/Aniverse/inexistence
+# Author: Aniverse
+#
+script_update=2020.06.26
+script_version=r12049
+
+################################################################################################ Debug
+
+usage_for_debug() {
+    export local_packages=/etc/inexistence/00.Installation
+    export s=$local_packages/package/qbittorrent/configure
+    rm -f $s ; nano $s
+    bash /etc/inexistence/00.Installation/package/qbittorrent/configure -u $iUser -p $iPass -w 2017 -i 9002
+    bash <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/package/qbittorrent/configure)
+}
+
+################################################################################################ Get options
+
+unset LogRootPath LogTimes DebLocation SCLocation LOCKLocation OutputLOG \
+      iUser iPass iHome wPort iPort lang
+
+AppName=qBittorrent
+AppNameLower=qbittorrent
+Need_SourceCode=no
+pm_action=configure
+
+function show_usage() { echo "
+$AppName $pm_action $script_version ($script_update)
+Usage:
+      -u        Username for qBittorrent
+      -p        Password for qBittorrent WebUI
+      -h        Specifiy user's home path
+      -w        WebUI port for qBittorrent
+      -i        Incoming port for qBittorrent
+      -l        language for qBittorrent WebUI
+      -d        Enable debug mode
+      -f        Force recover existing configuration
+      --shared  run this script without root privilege, this is for shared seedbox
+      --log     Show logfile's content"
+exit 1 ; }
+
+OPTS=$(getopt -a -o u:p:w:i:l:dhf --long "username:,password:,home:,wport:,iport:,lang:,logbase:,debug,shared,log,help,force" -- "$@")
+[ ! $? = 0 ] && show_usage
+eval set -- "$OPTS"
+while true; do
+  case "$1" in
+    -u | --username ) iUser="$2"    ; shift 2 ;;
+    -p | --password ) iPass="$2"    ; shift 2 ;;
+    -h | --home     ) iHome="$2"    ; shift 2 ;;
+    -w | --wport    ) wPort="$2"    ; shift 2 ;;
+    -i | --iport    ) iPort="$2"    ; shift 2 ;;
+    -l | --lang     ) lang="$2"     ; shift 2 ;;
+    -d | --debug    ) debug=1       ; shift   ;;
+    -f | --force    ) force=1       ; shift   ;;
+    -h | --help     ) show_usage    ; exit 0   ;  shift   ;;
+         --log      ) show_log=1    ; shift   ;;
+         --logbase  ) LogTimes="$2" ; shift 2 ;;
+         --shared   ) shared=1      ; shift   ;;
+    -- ) shift 2 ; break ;;
+     * ) break ;;
+  esac
+done
+
+################################################################################################ Set Variables 1
+
+if [[ -f /etc/inexistence/00.Installation/function ]]; then
+    source /etc/inexistence/00.Installation/function
+else
+    source <(wget --no-check-certificate -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/function)
+fi
+
+set_variables_log_location
+check_var_OutputLOG
+debug_log_location
+cat_outputlog
+add_local_script_to_PATH
+check_var_iUser_iPass_iHome
+
+################################################################################################ Set Variables 2
+
+[[ -z $wPort ]] && wPort=2017
+[[ -z $iPort ]] && iPort=9002
+[[ $lang == eng ]] && qbt_language=en
+[[ -z $qbt_language ]] && qbt_language=zh
+
+PortCheck $wPort $iPort
+[[ $port_used == 1 ]] && echo_error "Please change your port" && exit 1
+
+qb_installed_ver=$(qbittorrent-nox --version 2>&1 | awk '{print $2}' | grep -oE "[0-9.]+")
+qbconf="$iHome/.config/qBittorrent/qBittorrent.conf"
+
+################################################################################################
+
+function write_qbittorrent_nginx_reverse_proxy () {
+    # Nginx Reverse
+    # Currently this is only for the first non-root user
+    if [[ -d /etc/nginx/apps ]] && [[ ! -f /etc/nginx/apps/qbittorrent.conf ]]; then
+        cat << EOF > /etc/nginx/apps/qbittorrent.conf
+location /qb {
+    return 301 https://\$host/qbittorrent/;
+}
+
+# https://github.com/qbittorrent/qBittorrent/wiki/NGINX-Reverse-Proxy-for-Web-UI
+location /qbittorrent/ {
+    proxy_pass              http://127.0.0.1:$wPort/;
+    proxy_set_header        X-Forwarded-Host        \$server_name:\$server_port;
+    proxy_hide_header       Referer;
+    proxy_hide_header       Origin;
+    proxy_set_header        Referer                 '';
+    proxy_set_header        Origin                  '';
+    add_header              X-Frame-Options         "SAMEORIGIN";
+}
+EOF
+        if [[ -d /opt/qBittorrent/WebUI/miniers.qb-web/public ]]; then
+            sleep 0.1
+        fi
+        nginx -s reload      >> "$OutputLOG" 2>&1
+    fi
+}
+
+
+function write_qbittorrent_systemd () {
+    cat << EOF > /etc/systemd/system/qbittorrent@.service
+[Unit]
+Description=qBittorrent Daemon Service
+After=network.target
+
+[Service]
+#UMask=000
+Type=forking
+User=%I
+LimitNOFILE=infinity
+ExecStart=/usr/bin/qbittorrent-nox -d
+ExecStop=/usr/bin/killall -s 9 /usr/bin/qbittorrent-nox
+Restart=on-failure
+#TimeoutSec=300
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl $systemctl_user_flag daemon-reload >> $OutputLOG 2>&1
+}
+
+
+function write_qbittorrent_conf () {
+    # This is for users who still using qBittorrent older than 4.2.0
+    # Therefore some qBittorrent-4.2-and-above-only settings are not added here
+    cat << EOF > $qbconf
+[Application]
+FileLogger\Enabled=true
+FileLogger\Age=6
+FileLogger\DeleteOld=true
+FileLogger\Backup=true
+FileLogger\AgeType=1
+FileLogger\Path=$iHome/.config/qBittorrent
+FileLogger\MaxSize=20
+
+[BitTorrent]
+Session\AnnounceToAllTiers=true
+Session\AsyncIOThreadsCount=4
+Session\CheckingMemUsageSize=16
+Session\ChokingAlgorithm=FixedSlots
+Session\CoalesceReadWrite=false
+Session\FilePoolSize=40
+Session\GuidedReadCache=true
+Session\MultiConnectionsPerIp=false
+Session\SeedChokingAlgorithm=FastestUpload
+Session\SendBufferLowWatermark=10
+Session\SendBufferWatermark=500
+Session\SendBufferWatermarkFactor=50
+Session\SocketBacklogSize=30
+Session\SuggestMode=false
+Session\uTPMixedMode=TCP
+
+[LegalNotice]
+Accepted=true
+
+[Preferences]
+Advanced\AnnounceToAllTrackers=false
+Advanced\RecheckOnCompletion=false
+Advanced\osCache=true
+Advanced\trackerPort=9000
+Bittorrent\AddTrackers=false
+Bittorrent\DHT=false
+Bittorrent\Encryption=1
+Bittorrent\LSD=false
+Bittorrent\MaxConnecs=-1
+Bittorrent\MaxConnecsPerTorrent=-1
+Bittorrent\MaxRatioAction=0
+Bittorrent\PeX=false
+Bittorrent\uTP=false
+Bittorrent\uTP_rate_limited=true
+Connection\GlobalDLLimitAlt=0
+Connection\GlobalUPLimitAlt=0
+#Connection\InetAddress=1.1.1.1
+#Connection\Interface=eth0
+#Connection\InterfaceAddress=0.0.0.0
+#Connection\InterfaceName=eth0
+Connection\ResolvePeerCountries=true
+Connection\PortRangeMin=$iPort
+Downloads\DiskWriteCacheSize=64
+Downloads\DiskWriteCacheTTL=60
+Downloads\SavePath=$iHome/qbittorrent/download
+Downloads\SaveResumeDataInterval=3
+Downloads\ScanDirsV2=@Variant(\0\0\0\x1c\0\0\0\0)
+Downloads\StartInPause=false
+Downloads\TorrentExportDir=$iHome/qbittorrent/torrent
+General\Locale=$qbt_language
+Queueing\QueueingEnabled=false
+#Disable CSRF Protection For PT Plugin Plus
+WebUI\AlternativeUIEnabled=false
+WebUI\CSRFProtection=false
+WebUI\HostHeaderValidation=true
+WebUI\LocalHostAuth=false
+WebUI\Port=$wPort
+WebUI\RootFolder=/opt/qBittorrent/WebUI/miniers.qb-web
+
+EOF
+    if [[ -z $(command -v qbpass) ]]; then
+        wget --no-check-certificate -nv https://github.com/KozakaiAya/libqbpasswd/releases/download/v0.2/qb_password_gen_static -O /usr/local/bin/qbpass >> $OutputLOG 2>&1
+        chmod +x /usr/local/bin/qbpass >> $OutputLOG 2>&1
+    fi
+    qbPassOld=$(echo -n $iPass | md5sum | cut -f1 -d ' ')
+    qbPassNew=$(/usr/local/bin/qbpass $iPass)
+    cat << EOF >> $qbconf
+WebUI\Username=$iUser
+WebUI\Password_ha1=@ByteArray($qbPassOld)
+WebUI\Password_PBKDF2="@ByteArray($qbPassNew)"
+EOF
+}
+
+
+
+################################################################################################
+
+
+
+function configure_qbittorrent() {
+
+    echo >> $OutputLOG
+
+    backup_old_config qBittorrent
+    mkdir -p  $iHome/qbittorrent/{download,torrent,watch}   $iHome/.config/qBittorrent   $local_script   $PortLocation
+    if [[ -f $local_packages/package/qbittorrent/qqbb ]]; then
+        ln -s  $local_packages/package/qbittorrent/qqbb      $local_script/qqbb       >> $OutputLOG 2>&1
+    else
+        wget -nv https://github.com/Aniverse/inexistence/raw/master/00.Installation/package/qbittorrent/qqbb -O $local_script/qqbb >> $OutputLOG 2>&1
+        chmod +x $local_script/qqbb
+    fi
+
+    write_qbittorrent_systemd
+    write_qbittorrent_conf
+    write_qbittorrent_nginx_reverse_proxy
+
+    chmod -R 755             $iHome/qbittorrent   $iHome/.config/qBittorrent >> $OutputLOG 2>&1
+    chown -R $iUser.$iUser   $iHome/qbittorrent   $iHome/.config/qBittorrent >> $OutputLOG 2>&1
+
+    systemctl enable qbittorrent@$iUser >> $OutputLOG 2>&1
+    systemctl start  qbittorrent@$iUser >> $OutputLOG 2>&1
+    [[ -d /var/www/h5ai/$iUser ]] && ln -s   $iHome/qbittorrent/download   /var/www/h5ai/$iUser/qbittorrent >> $OutputLOG 2>&1
+    sleep 2
+
+    # Setup watch folder via WebAPI
+    if version_ge $qb_installed_ver 4.2.0 ; then
+        curl -i --data 'json={"scan_dirs":{"'"${iHome}/qbittorrent/watch"'":1}}'   http://localhost:${wPort}/api/v2/app/setPreferences >> $OutputLOG 2>&1
+    else
+        curl -i --data 'json={"scan_dirs":{"'"${iHome}/qbittorrent/watch"'":1}}'   http://localhost:${wPort}/command/setPreferences    >> $OutputLOG 2>&1
+    fi
+    sed -i "s|WebUI\\\LocalHostAuth.*|WebUI\\\LocalHostAuth=true|" $qbconf >> $OutputLOG 2>&1  # Turn on LocalHostAuth after setup watch folder
+    grep ScanDirsV2 $qbconf -q || echo_error "Failed to set monitored folder"
+
+    echo  $wPort >  $PortLocation/$iUser.$AppNameLower
+    systemctl restart qbittorrent@$iUser >> $OutputLOG 2>&1
+    sleep 2
+    systemctl status  qbittorrent@$iUser >> $OutputLOG 2>&1
+
+    status_lock=$AppName-c
+    echo "status_lock=$status_lock" > /tmp/Variables
+    rm -f /tmp/$status_lock.1.lock /tmp/$status_lock.2.lock 
+    ps --user $iUser | grep qbittorrent-nox -q && touch /tmp/$status_lock.1.lock || touch /tmp/$status_lock.2.lock
+    echo >> $OutputLOG
+
+}
+
+
+
+if [[ -d $iHome/.config/qBittorrent ]] && [[ $force != 1 ]] ;then
+    echo -e "Configuration for $iUser already exists, skip configuration ..."
+else
+    echo_task "Configuring $AppName ..."
+    configure_qbittorrent & spinner $!
+    check_status $status_lock
+fi

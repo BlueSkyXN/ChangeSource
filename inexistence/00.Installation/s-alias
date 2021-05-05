@@ -1,0 +1,345 @@
+#!/bin/bash
+#
+# https://github.com/Aniverse/inexistence
+# Author: Aniverse
+#
+# script_update=2020.09.01
+# script_version=r12023
+# This var will recover other script's var when source
+################## Inexistence Mod Start ##################
+
+function setcolor() {
+black=$(tput setaf 0); red=$(tput setaf 1)    ; green=$(tput setaf 2); yellow=$(tput setaf 3);  bold=$(tput bold)   ; jiacu=${normal}${bold}
+blue=$(tput setaf 4) ; magenta=$(tput setaf 5); cyan=$(tput setaf 6) ; white=$(tput setaf 7) ;  normal=$(tput sgr0)
+on_black=$(tput setab 0); on_red=$(tput setab 1)    ; on_green=$(tput setab 2); on_yellow=$(tput setab 3)
+on_blue=$(tput setab 4) ; on_magenta=$(tput setab 5); on_cyan=$(tput setab 6) ; on_white=$(tput setab 7)
+shanshuo=$(tput blink)  ; wuguangbiao=$(tput civis)    ; guangbiao=$(tput cnorm)
+underline=$(tput smul)  ; reset_underline=$(tput rmul) ; dim=$(tput dim)
+standout=$(tput smso)   ; reset_standout=$(tput rmso)  ; title=${standout}
+baihuangse=${white}${on_yellow}; bailanse=${white}${on_blue} ; bailvse=${white}${on_green}
+baiqingse=${white}${on_cyan}   ; baihongse=${white}${on_red} ; baizise=${white}${on_magenta}
+heibaise=${black}${on_white}   ; heihuangse=${on_yellow}${black}
+}
+
+function gggclone(){ git clone --depth=1 $1 && cd $(echo ${1##*/}) ;}
+function io_test() { (LANG=C dd if=/dev/zero of=test_$$ bs=64k count=16k conv=fdatasync && rm -f test_$$ ) 2>&1 | awk -F, '{io=$NF} END { print io}' | sed 's/^[ \t]*//;s/[ \t]*$//' ; }
+function iotest() { echo
+    io1=$( io_test ) ; echo -e "${bold}硬盘 I/O (第一次测试) : ${yellow}$io1${normal}"
+    io2=$( io_test ) ; echo -e "${bold}硬盘 I/O (第二次测试) : ${yellow}$io2${normal}"
+    io3=$( io_test ) ; echo -e "${bold}硬盘 I/O (第三次测试) : ${yellow}$io3${normal}\n"
+}
+
+# Find a file with a pattern in name:
+function ff() { find . -type f -iname '*'"$*"'*' -ls ; }
+
+# Find a file with pattern $1 in name and Execute $2 on it:
+function fe() { find . -type f -iname '*'"${1:-}"'*' -exec ${2:-file} {} \;  ; }
+
+# Find a pattern in a set of files and highlight them:
+#+ (needs a recent version of egrep).
+function fstr(){
+    OPTIND=1
+    local mycase=""
+    local usage="fstr: find string in files.
+Usage: fstr [-i] \"pattern\" [\"filename pattern\"] "
+    while getopts :it opt
+    do
+        case "$opt" in
+           i) mycase="-i " ;;
+           *) echo "$usage"; return ;;
+        esac
+    done
+    shift $(( $OPTIND - 1 ))
+    if [ "$#" -lt 1 ]; then
+        echo "$usage"
+        return;
+    fi
+    find . -type f -name "${2:-*}" -print0 | \
+xargs -0 egrep --color=always -sn ${case} "$1" 2>&- | more
+}
+
+function jieya() {
+    file=$1
+    delete=$2
+    if [ -f $file ] ; then
+        case $1 in
+            *.tar.bz2)   tar xvjf $1        ;;
+            *.tar.gz)    tar xvzf $1        ;;
+            *.tar.xz)    xz -d    $1         ;
+                         tar xvf ${file%.*} ;;
+            *.bz2)       bunzip2  $1        ;;
+            *.rar)       unrar x  $1        ;;
+            *.gz)        gunzip   $1        ;;
+            *.tar)       tar xvf  $1        ;;
+            *.tbz2)      tar xvjf $1        ;;
+            *.tgz)       tar xvzf $1        ;;
+            *.zip)       unzip $1           ;;
+            *.Z)         uncompress $1      ;;
+            *.7z)        7z x $1            ;;
+            *)           echo "'$1' cannot be extracted via jieya" ;;
+        esac
+        [[ $delete == d ]] && rm -f $file ${file%.*}
+    else
+        echo "'$1' is not a valid file!"
+    fi
+}
+
+function chaip() {
+    local ipv4=$1
+    echo $ipv4 | grep -qE '^[0-9][0-9]?[0-9]?\.[0-9][0-9]?[0-9]?\.[0-9][0-9]?[0-9]?\.[0-9][0-9]?[0-9]?$' || { echo "Error: Not valid IPv4" ; exit 1 ; }
+    mkdir -p $HOME/.abench
+    wget --no-check-certificate -t1 -T6 -qO- https://ipapi.co/$ipv4/json > $HOME/.abench/ipapi 2>&1
+    ccoodde=$( cat $HOME/.abench/ipapi | grep \"country\"      | awk -F '"' '{print $4}' ) 2>/dev/null
+    country=$( cat $HOME/.abench/ipapi | grep \"country_name\" | awk -F '"' '{print $4}' ) 2>/dev/null
+    regionn=$( cat $HOME/.abench/ipapi | grep \"region\"       | awk -F '"' '{print $4}' ) 2>/dev/null
+    cityyyy=$( cat $HOME/.abench/ipapi | grep \"city\"         | awk -F '"' '{print $4}' ) 2>/dev/null
+    isppppp=$( cat $HOME/.abench/ipapi | grep \"org\"          | awk -F '"' '{print $4}' ) 2>/dev/null
+    asnnnnn=$( cat $HOME/.abench/ipapi | grep \"asn\"          | awk -F '"' '{print $4}' ) 2>/dev/null
+    [[ $cityyyy == Singapore ]] && unset cityyyy
+    [[ -z $isppppp ]] && isp="No ISP detected"
+    [[ -z $asnnnnn ]] && isp="No ASN detected"
+    rm -f $HOME/.abench/ipapi 2>&1
+    echo -e "$ipv4"
+    echo -e "$asnnnnn, $isppppp"
+    echo -e "$country, $regionn, $cityyyy"
+}
+
+# Creates an archive (*.tar.gz) from given directory.
+function make-tar() { tar cvzf "${1%%/}.tar.gz"  "${1%%/}/"; }
+
+# Create a ZIP archive of a file or folder.
+function make-zip() { zip -r "${1%%/}.zip" "$1" ; }
+
+function dabao() {
+    local target=$1
+    if [[ -d "$target" ]];then
+        folder_size=$(du -sB MiB $target | awk '{print $1}' | grep -oE "[0-9]+")
+        echo -e "\033[0;33m目标文件夹大小 $folder_size MiB\033[0m"
+        [[ $folder_size -ge 200 ]] && read -p "确定打包么？"
+        mkdir -p $HOME/tars
+        target_full_path=$(cd $target;pwd)
+        dirpath=$(dirname $target_full_path)
+        target=$(basename $target_full_path)
+        output=$target
+        echo $target | grep -qE "^." && output=$(echo $target | sed "s/\.//")
+        tarfile=$HOME/tars/$output.tar.gz
+        [[ -e $tarfile ]] && echo -ne "\033[0;31m同名压缩包已存在" && rm -f $tarfile && echo -e "，删除之\033[0m"
+        tar zcf $tarfile -C $dirpath $target && echo -ne "\033[0;32m打包后体积 " && du -sB KiB $tarfile | awk '{print $1}'
+        echo -e "\033[0;34msz $tarfile\033[0m\n"
+    else
+        echo "\033[0;31m不是文件夹\033[0m"
+    fi
+}
+
+if (! export | grep -q sbin); then
+    export PATH=$PATH:/usr/local/sbin:/usr/sbin:/sbin
+fi
+
+newpass() { perl -le 'print map {(a..z,A..Z,0..9)[rand 62] } 0..pop' 15 ; }
+sprunge.us() { curl -F 'sprunge=<-' http://sprunge.us ; }
+lines()  { printf "%-100s\n" "-" | sed 's/\s/-/g' ; }
+
+#ulimit -SHn 999999
+
+################## Personal Alias Start ##################
+
+export LC_ALL=en_US.UTF-8
+export LANG=en_US.UTF-8
+export LANGUAGE=en_US.UTF-8
+export repo="https://github.com/Aniverse/inexistence"
+export local_repo_base=/etc/inexistence
+export local_packages=/etc/inexistence/00.Installation
+export local_script=/usr/local/bin/abox
+
+alias qba="systemctl start qbittorrent@iUser"
+alias qbb="systemctl stop qbittorrent@iUser"
+alias qbc="systemctl status qbittorrent@iUser"
+alias qbr="systemctl restart qbittorrent@iUser"
+alias qbl="tail -300 /home/iUser/.config/qBittorrent/qbittorrent.log"
+alias qbs="nano +40  /home/iUser/.config/qBittorrent/qBittorrent.conf"
+alias dea="systemctl start deluged@iUser"
+alias deb="systemctl stop deluged@iUser"
+alias dec="systemctl status deluged@iUser"
+alias der="systemctl restart deluged@iUser"
+alias del="grep -Ev 'TotalTraffic|Successfully loaded|Saving the state|Saving the fastresume|connection made from: 127.0.0.1|non-clean fashion' /home/iUser/.config/deluge/deluged.log | tail -300"
+alias dwa="systemctl start deluge-web@iUser"
+alias dwb="systemctl stop deluge-web@iUser"
+alias dwc="systemctl status deluge-web@iUser"
+alias dwr="systemctl restart deluge-web@iUser"
+alias dwl="tail -200 /home/iUser/.config/deluge/deluge-web.log"
+alias tra="systemctl start transmission@iUser"
+alias trb="systemctl stop transmission@iUser"
+alias trc="systemctl status transmission@iUser"
+alias trr="systemctl restart transmission@iUser"
+alias trl="tail -200 /home/iUser/.config/transmission-daemon/transmission.log"
+alias rta="su iUser -c 'rt start'"
+alias rtb="su iUser -c 'rt -k stop'"
+alias rtc="su iUser -c 'rt'"
+alias rtr="su iUser -c 'rt -k restart'"
+alias rtscreen="chmod -R 777 /dev/pts && su iUser -c 'screen -r rtorrent'"
+alias irssia="su iUser -c 'rt -i start'"
+alias irssib="su iUser -c 'rt -i -k stop'"
+alias irssic="su iUser -c 'rt -i'"
+alias irssir="su iUser -c 'rt -i -k restart'"
+alias irssiscreen="chmod -R 777 /dev/pts && su iUser -c 'screen -r irssi'"
+alias fga="systemctl start flexget@iUser"
+alias fgb="systemctl stop flexget@iUser"
+alias fgc="systemctl status flexget@iUser"
+alias fgr="systemctl restart flexget@iUser"
+alias fgaa="runuser -l iUser -c 'flexget daemon start --daemonize'"
+alias fgcc="runuser -l iUser -c 'flexget daemon status'"
+alias fgrr="runuser -l iUser -c 'flexget daemon reload-config'"
+alias fgcheck="runuser -l iUser -c 'flexget check'"
+alias fge="runuser -l iUser -c 'flexget execute'"
+alias fgl="echo ; tail -300 /home/iUser/.config/flexget/flexget.log ; echo"
+alias fgs="nano +60 /home/iUser/.config/flexget/config.yml"
+alias fla="systemctl start flood"
+alias flb="systemctl stop flood"
+alias flc="systemctl status flood"
+alias flr="systemctl restart flood"
+alias sssa="/appex/bin/serverSpeeder.sh start"
+alias sssb="/appex/bin/serverSpeeder.sh stop"
+alias sssc="/appex/bin/serverSpeeder.sh status"
+alias sssr="/appex/bin/serverSpeeder.sh restart"
+alias ssss="nano +60 /etc/serverSpeeder.conf"
+alias lssa="/appex/bin/lotServer.sh start"
+alias lssb="/appex/bin/lotServer.sh stop"
+alias lssc="/appex/bin/lotServer.sh status"
+alias lssr="/appex/bin/lotServer.sh restart"
+alias lsss="nano +60 /appex/etc/config"
+alias nginxr="/etc/init.d/nginx restart"
+
+alias yongle="du -sB GiB"
+alias yongle2="du -sB MiB"
+alias rtyongle="du -sB GiB /home/iUser/rtorrent/download"
+alias qbyongle="du -sB GiB /home/iUser/qbittorrent/download"
+alias deyongle="du -sB GiB /home/iUser/deluge/download"
+alias tryongle="du -sB GiB /home/iUser/transmission/download"
+alias cdde="cd /home/iUser/deluge/download"
+alias cdqb="cd /home/iUser/qbittorrent/download"
+alias cdrt="cd /home/iUser/rtorrent/download"
+alias cdtr="cd /home/iUser/transmission/download"
+alias cdin="cd /etc/inexistence/"
+alias cdrut="cd /var/www/rutorrent"
+
+alias rclonec='echo;echo q | rclone config | grep -Ev ".*\)|e/.*"'
+alias scrgd="screen -U -R GoogleDrive"
+alias scrgda="screen -U -r -d GoogleDrive"
+alias scrgdb="screen -S GoogleDrive -X quit"
+function scrb(){ screen -S $1 -X quit  ;}
+
+alias dddd='rm -rf'
+alias ..='cd ..'
+alias path='echo -e ${PATH//:/\\n}'
+alias libpath='echo -e ${LD_LIBRARY_PATH//:/\n}'
+alias dh='df -kTh'
+alias aatop="TERM=st atop 1"
+alias px="ps aux | grep -v grep | grep"
+alias tree="tree --dirsfirst"
+alias l="ls -hAv --color --group-directories-first"
+alias ll="ls -hAlvZ --color --group-directories-first"
+alias ios="iostat -dxm 1"
+alias vms="vmstat 1 10"
+alias vns="vnstat -l"
+alias vnss="vnstat -m ; vnstat -d"
+alias vnsa="systemctl start vnstat"
+alias vnsb="systemctl stop vnstat"
+alias vnsc="systemctl status vnstat"
+alias vnsr="systemctl restart vnstat"
+
+alias abench="bash <(wget -qO- https://github.com/Aniverse/A/raw/i/a)"
+alias bench.sh="wget -qO- bench.sh | bash"
+alias fiobench="bash <(wget -qO- https://github.com/amefs/fio-bench/raw/master/fio-bench_zh-cn.sh -o /dev/null)"
+
+alias sousuo="find / -name"
+alias sousuo2="find /home/iUser -name"
+alias swapon="dd if=/dev/zero of=/etc/.swapfile bs=1M count=2048;mkswap /etc/.swapfile;swapon /etc/.swapfile;swapon -s"
+alias swapoff="swapoff /etc/.swapfile;rm -f /etc/.swapfile"
+
+alias yuan="nano +20 /etc/apt/sources.list"
+alias sshr="sed -i '/.*AllowGroups.*/d' /etc/ssh/sshd_config ; sed -i '/.*PasswordAuthentication.*/d' /etc/ssh/sshd_config ; sed -i '/.*PermitRootLogin.*/d' /etc/ssh/sshd_config ; echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config ; /etc/init.d/ssh restart >/dev/null 2>&1 && echo -e '\n已开启 root 登陆\n'"
+
+alias s-opt="echo && cat /log/inexistence/installed.log && echo"
+alias s-end="echo && cat /log/inexistence/end.log"
+
+function s-log() {
+    local logfile=$(cat /tmp/current.logfile 2>/dev/null)
+    if   [[ ! -f /tmp/current.logfile ]] ; then
+        echo -e "/tmp/current.logfile does not exist"
+    elif [[ ! -f $logfile ]]; then
+        echo -e "$logfile does not exist"
+    elif [[   -f $logfile ]]; then
+        echo -e "\n${yellow}$logfile${normal}" ; lines
+        tail -f $logfile
+    fi
+}
+
+function s-debug() {
+    source /etc/inexistence/00.Installation/function
+    source /etc/inexistence/00.Installation/check-sys
+    set_log_when_there_is_none
+}
+
+function s-info() {
+    local more=$1
+    source /etc/inexistence/00.Installation/function
+    source /etc/inexistence/00.Installation/check-sys
+    export_inexistence_info
+    rm -f /tmp/.cpu.tmp
+    [[ $more == hw ]] && hardware_check_1 &&
+    echo -n "
+CPU                 $CPUNum$cname (${cpucores}C${cputhreads}T)
+RAM                 $tram MB ($uram MB Used)
+Disk                $disk_total_size GB ($disk_used_size GB Used)" > /tmp/.cpu.tmp
+    echo "$(cat /tmp/.cpu.tmp 2>/dev/null)
+OS                  $displayOS
+Kernel              $running_kernel
+Virtual             $virtual
+
+IPv4                $serveripv4
+IPv6                $serveripv6
+Interface           $interface
+
+Master User         $(cat /log/inexistence/info/installed.user.list.txt 2>/dev/null | head -1)
+Password            $iPass
+User's config       $iHome/.config
+
+LogBase             $LogBase
+local_repo          $local_repo
+local_script        $local_script
+local_packages      $local_packages
+inexistence_files   $inexistence_files
+
+network files       /etc/network/interfaces
+                    /etc/netplan/01-netcfg.yaml
+apt sources         /etc/apt/sources.list
+"
+}
+
+################## Personal Alias END ##################
+
+# setcolor
+
+# Custom History Format
+HISTFILESIZE=4000
+HISTSIZE=4000
+# export HISTTIMEFORMAT="${yellow}[%F]${cyan}[%T]${normal} "
+export HISTTIMEFORMAT="$(tput setaf 3)[%F]$(tput setaf 6)[%T]$(tput sgr0) "
+
+# Disable mail check/warning
+shopt -u mailwarn
+unset    MAILCHECK
+
+if [[ $1 == 1 ]];then
+    echo -e "\n${green}Customed alias is enabled${normal}\n"
+fi
+
+################## Inexistence Mod END ##################
+
+deprecated_function_alias() {
+    sed -i -n -e :a -e '1,100!{P;N;D;};N;ba' /etc/bash.bashrc
+    sed "/#\!\/bin\/bash/"d /usr/local/bin/s-alias >> /etc/bash.bashrc
+    while grep -q "Inexistence Mod" /etc/bash.bashrc ; do sed -i '$d' /etc/bash.bashrc ; done
+
+    s=/etc/inexistence/00.Installation/s-alias;rm -f $s ; nano $s
+}

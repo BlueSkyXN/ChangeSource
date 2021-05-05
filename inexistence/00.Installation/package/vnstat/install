@@ -1,0 +1,149 @@
+#!/bin/bash
+#
+# https://github.com/Aniverse/inexistence
+# Author: Aniverse
+
+script_update=2020.04.19
+script_version=r10004
+
+################################################################################################ Debug
+
+usage_for_debug() {
+    export local_packages=/etc/inexistence/00.Installation
+    export s=$local_packages/package/vnstat/install
+    rm -f $s ; nano $s ; bash $s
+    bash <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/package/vnstat/install)
+}
+
+################################################################################################ Get options
+
+unset LogRootPath LogTimes DebLocation SCLocation LOCKLocation OutputLOG
+
+AppName=vnstat
+AppNameLower=vnstat
+Need_SourceCode=yes
+pm_action=install
+
+function show_usage() { echo "
+$AppName $pm_action $script_version ($script_update)
+Usage:
+      -l        Specifiy LogBase (Not log file)
+      -i        Specifiy Default interface monitored by vnstat
+      -d        Enable debug mode
+      --log     Show logfile's content"
+exit 1 ; }
+
+OPTS=$(getopt -o v:l:i:d -al version:,debug,logbase:,interface:,log -- "$@")
+[ ! $? = 0 ] && show_usage
+eval set -- "$OPTS"
+
+while [ -n "$1" ] ; do case "$1" in
+    -v | --version      ) version="$2"  ; shift 2 ;;
+    -l | --logbase      ) LogTimes="$2" ; shift 2 ;;
+    -i | --interface    ) wangka="$2"   ; shift 2 ;;
+    -d | --debug        ) debug=1       ; shift   ;;
+         --log          ) show_log=1    ; shift   ;;
+    -- ) shift ; break ;;
+esac ; done
+
+################################################################################################ Set Variables
+
+if [[ -f /etc/inexistence/00.Installation/function ]]; then
+    source /etc/inexistence/00.Installation/function
+else
+    source <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/function)
+fi
+
+set_variables_log_location
+check_var_OutputLOG
+debug_log_location
+cat_outputlog
+
+[ -n "$(grep 'eth0:' /proc/net/dev)" ] && wangka1=eth0 || wangka1=`cat /proc/net/dev |awk -F: 'function trim(str){sub(/^[ \t]*/,"",str); sub(/[ \t]*$/,"",str); return str } NR>2 {print trim($1)}'  |grep -Ev '^lo|^sit|^stf|^gif|^dummy|^vmnet|^vir|^gre|^ipip|^ppp|^bond|^tun|^tap|^ip6gre|^ip6tnl|^teql|^venet|^he-ipv6|^docker' |awk 'NR==1 {print $0}'`
+wangka2=$(ip link show | grep -i broadcast | grep -m1 UP  | cut -d: -f 2 | cut -d@ -f 1 | sed 's/ //g')
+
+if [[ -n $wangka2 ]]; then
+    if [[ $wangka1 == $wangka2 ]];then
+        interface=$wangka1
+    else
+        interface=$wangka2
+    fi
+else
+    interface=$wangka1
+fi
+
+[[ -n $wangka ]] && interface=$wangka
+
+################################################################################################
+
+
+
+
+
+# https://humdi.net/wiki/vnstat/install/in_debian
+# https://github.com/vergoh/vnstat
+# https://github.com/alexandermarston/vnstat-dashboard
+
+function install_vnstat() {
+    echo >> $OutputLOG
+
+    apt_install_check    make gcc libc6-dev libsqlite3-0 libsqlite3-dev composer
+    apt_install_separate # && touch /tmp/$status_lock.1.lock || touch /tmp/$status_lock.2.lock
+
+    # wget -nv -N https://github.com/vergoh/vnstat/releases/download/v2.6/vnstat-2.6.tar.gz
+    wget -nv -N https://humdi.net/vnstat/vnstat-latest.tar.gz   >> "$OutputLOG" 2>&1
+    tar zxf vnstat-latest.tar.gz                                >> "$OutputLOG" 2>&1
+    rm -f vnstat-latest.tar.gz                                  >> "$OutputLOG" 2>&1
+    cd vnstat-*                                                 >> "$OutputLOG" 2>&1
+    ./configure --prefix=/usr --sysconfdir=/etc                 >> "$OutputLOG" 2>&1
+    make -j$MAXCPUS                                             >> "$OutputLOG" 2>&1
+    make install                                                >> "$OutputLOG" 2>&1
+
+    if systemctl status vnstatz 2>&1 | grep -q "not.*found" ; then
+        cp -f examples/systemd/simple/vnstat.service /etc/systemd/system/
+    fi
+
+    [[ -f /etc/systemd/system/vnstat.service ]] && sed -i -e '/^ProtectSystem=/d' /etc/systemd/system/vnstat.service
+    [[ -n $interface ]] && [[ $interface != eth0 ]] && sed -i "s/Interface.*/Interface $interface/" /etc/vnstat.conf
+
+    systemctl daemon-reload                                     >> "$OutputLOG" 2>&1
+    systemctl enable  vnstatd                                   >> "$OutputLOG" 2>&1
+    systemctl restart vnstatd                                   >> "$OutputLOG" 2>&1
+    cd ..
+    rm -rf vnstat-*
+
+    if [[ -d $web_rutorrent ]] && [[ -n $(which composer) ]] ; then
+        git clone --depth=1 https://github.com/alexandermarston/vnstat-dashboard   >> "$OutputLOG" 2>&1
+        cp -rp vnstat-dashboard/app/ $web_root/vnstat/                             >> "$OutputLOG" 2>&1
+        rm -rf vnstat-dashboard                                                    >> "$OutputLOG" 2>&1
+        cd $web_root/vnstat/                                                       >> "$OutputLOG" 2>&1
+        composer install                                                           >> "$OutputLOG" 2>&1
+        chown -R www-data:www-data $web_root/vnstat                                >> "$OutputLOG" 2>&1
+    fi
+
+    vnstat_ver=$(vnstat --version | grep -oE "[0-9.]+")
+
+    status_lock=$AppNameLower
+    echo "status_lock=$status_lock" > /tmp/Variables
+    rm -f /tmp/$status_lock.1.lock /tmp/$status_lock.2.lock 
+    if version_ge $vnstat_ver 2.6; then
+        touch /tmp/$status_lock.1.lock
+    else
+        touch /tmp/$status_lock.2.lock
+    fi
+    [[ -f /tmp/$status_lock.1.lock ]] && touch $LOCKLocation/$AppNameLower.lock
+
+    if wget --no-check-certificate "https://127.0.0.1/vnstat" -o /dev/null -qO- 2>&1  | grep Traffic -q ; then
+        touch $LOCKLocation/vnstat.dashboard.lock
+    fi
+
+    echo >> $OutputLOG
+}
+
+
+
+
+
+echo_task "Installing $AppName ..."
+install_vnstat & spinner $!
+check_status $status_lock

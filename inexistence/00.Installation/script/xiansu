@@ -1,0 +1,84 @@
+#!/bin/bash
+#
+# https://github.com/Aniverse/inexistence
+# Author: Aniverse
+#
+#################################################################################
+
+script_update=2020.07.18
+script_version=r20003
+
+black=$(tput setaf 0); red=$(tput setaf 1); green=$(tput setaf 2); yellow=$(tput setaf 3)
+blue=$(tput setaf 4); magenta=$(tput setaf 5); cyan=$(tput setaf 6); white=$(tput setaf 7)
+bold=$(tput bold); normal=$(tput sgr0); jiacu=${normal}${bold}
+
+uploadrate=$1
+interface=$2
+
+if [[ -z $interface ]] ;then
+    wangka1=$(cat /proc/net/dev | sort -rn -k2 | head -1 | awk -F':' '{print $1}')
+    wangka2=$(ip addr 2>&1 | grep -B2 $(ip route get 1 2>&1 | sed -n 's/^.*src \([0-9.]*\) .*$/\1/p') | grep -i broadcast | cut -d: -f 2 | cut -d@ -f 1 | sed 's/ //g')
+    interface=$wangka1
+    [[ -n $wangka2 ]] && interface=$wangka2
+fi
+
+#################################################################################
+
+default_speed=50
+
+if [[ -z $( command -v tc ) ]]; then
+    echo -e "\n${bold}${red}警告 ${jiacu}未检测到 tc ，限速命令无法执行${normal}\n"
+    exit 1
+fi
+
+#################################################################################
+
+
+
+function limit_speed(){
+    burstspeed=$(($uploadrate/10))
+    burstspeedmbit=`echo ${burstspeed}mbit`
+    uploadratembit=`echo ${uploadrate}mbit`
+    tc qdisc del dev $interface root >> /dev/null 2>&1
+    tc qdisc add dev $interface root handle 1: tbf rate $uploadratembit burst $burstspeedmbit latency 1s >> /dev/null 2>&1
+    tc qdisc add dev $interface parent 1: handle 11: pfifo_fast >> /dev/null 2>&1
+}
+
+
+if [[ -n $uploadrate ]]; then
+    limit_speed
+else
+    echo -e "${bold}"
+    echo -e "${green}(01) ${jiacu}限制全局上传速度"
+    echo -e "${green}(02) ${jiacu}解除全局上传限速"
+    echo -e "${green}(03) ${jiacu}退出"
+    echo -e ""
+    echo -ne "${yellow}${bold}你想做什么？ (默认选择解除限速)${normal} "; read response
+
+    case $response in
+        1 | 01) xxxsp=1 ;;
+        2 | 02 | "") xxxsp=2 ;;
+        3 | 03) xxxsp=3 ;;
+        *) xxxsp=2 ;;
+    esac
+
+    if [ "${xxxsp}" == "1" ]; then
+        echo
+        read -ep "${bold}请输入你要限速的网卡名字，一般用默认的就可以了：${yellow}" -i $interface interface
+        if ! ifconfig | grep $interface -q ;then
+            echo; echo "${bold}${red}警告 ${jiacu}未检测到名为 ${green}${interface}${jiacu} 的网卡 ，限速命令无法执行${normal}"; echo
+            exit 1
+        fi
+        echo -ne "${normal}"
+        read -ep "${bold}请输入你要限制的上行网速（Mbps）：${yellow}" -i $default_speed uploadrate
+        echo -e "${normal}"
+        limit_speed
+        echo "${bold}${green}已将全局上传速度限制到 ${uploadrate}Mbps${normal}"; echo
+    elif [ "${xxxsp}" == "2" ]; then
+        echo; read -e -p "${bold}请输入你要解除限速的网卡名字：${yellow}" -i $interface interface
+        tc qdisc del dev $interface root >> /dev/null 2>&1
+        echo; echo -e "${bold}${green}全局限速应该已经解除了${normal}"; echo
+    else
+        exit 0
+    fi
+fi

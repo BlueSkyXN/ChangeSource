@@ -1,0 +1,300 @@
+#!/bin/bash
+#
+# https://github.com/Aniverse/inexistence
+# Author: Aniverse
+#
+script_update=2020.07.15
+script_version=r12013
+
+################################################################################################ Debug
+
+usage_for_debug() {
+    export local_packages=/etc/inexistence/00.Installation
+    export s=$local_packages/package/novnc/configure
+    rm -f $s ; nano $s
+    bash /etc/inexistence/00.Installation/package/novnc/configure -u $iUser -p $iPass
+    bash <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/package/novnc/configure)
+}
+
+################################################################################################ Get options
+
+unset LogRootPath LogTimes DebLocation SCLocation LOCKLocation OutputLOG \
+      iUser iPass iHome wPort iPort lang
+
+AppName=noVNC
+AppNameLower=novnc
+Need_SourceCode=no
+pm_action=configure
+
+function show_usage() { echo "
+$AppName $pm_action $script_version ($script_update)
+Usage:
+      -u        Username for $AppName
+      -p        Password for $AppName
+      -h        Specifiy user's home path
+      -w        WebUI port (noVNC)
+      -i        VNC port
+      -d        Enable debug mode
+      -f        Force recover existing configuration
+      --log     Show logfile's content
+      --root    Enable root user's VNC"
+exit 1 ; }
+
+OPTS=$(getopt -a -o u:p:w:i:l:dhf --long "username:,password:,home:,wport:,iport:,lang:,logbase:,debug,log,root,help,force" -- "$@")
+[ ! $? = 0 ] && show_usage
+eval set -- "$OPTS"
+while true; do
+  case "$1" in
+    -u | --username ) iUser="$2"    ; shift 2 ;;
+    -p | --password ) iPass="$2"    ; shift 2 ;;
+    -h | --home     ) iHome="$2"    ; shift 2 ;;
+    -w | --wport    ) wPort="$2"    ; shift 2 ;;
+    -i | --iport    ) iPort="$2"    ; shift 2 ;;
+    -l | --lang     ) lang="$2"     ; shift 2 ;;
+    -d | --debug    ) debug=1       ; shift   ;;
+    -f | --force    ) force=1       ; shift   ;;
+    -h | --help     ) show_usage    ; exit 0   ;  shift   ;;
+         --root     ) enable_root=1 ; shift   ;;
+         --log      ) show_log=1    ; shift   ;;
+         --logbase  ) LogTimes="$2" ; shift 2 ;;
+    -- ) shift 2 ; break ;;
+     * ) break ;;
+  esac
+done
+
+################################################################################################ Set Variables 1
+
+if [[ -f /etc/inexistence/00.Installation/function ]]; then
+    source /etc/inexistence/00.Installation/function
+else
+    source <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/function)
+fi
+
+set_variables_log_location
+check_var_OutputLOG
+debug_log_location
+cat_outputlog
+check_var_iUser_iPass_iHome
+
+################################################################################################ Set Variables 2
+
+wPortBase=608
+iPortBase=590
+exist_vnc=$(ls /etc/systemd/system | grep tightvnc | wc -l)
+[[ $exist_vnc == 0 ]] && exist_vnc=1        # 1 is for root
+vnc_num=$(expr $exist_vnc + 1)
+[[ -z $wPort ]] && wPort=$wPortBase$vnc_num # Default 6800
+[[ -z $iPort ]] && iPort=$iPortBase$vnc_num # Starts at 5901
+
+PortCheck $wPort $iPort
+[[ $port_used == 1 ]] && echo_error "Please change your port" && exit 1
+
+################################################################################################
+
+function configure_novnc() {
+
+    echo >> $OutputLOG
+
+
+    if [[ ! -f "/etc/systemd/system/tightvnc1.service" ]]; then
+        cat << EOF > /etc/systemd/system/tightvnc1.service
+[Unit]
+Description=Remote desktop service (TightVNC)
+After=syslog.target network.target
+
+[Service]
+User=root
+Type=forking
+PIDFile=/root/.vnc/%H:1.pid
+ExecStartPre=/bin/sh -c "/usr/bin/vncserver -kill :1 > /dev/null 2>&1 || :"
+ExecStart=/usr/bin/vncserver -depth 24 -geometry 1440x900 :1
+ExecStop=/usr/bin/vncserver -kill :1 || :
+
+KillMode=mixed
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        cat << EOF > /etc/systemd/system/novnc1.service
+[Unit]
+Description=novnc websockify
+After=network.target
+
+[Service]
+Type=simple
+User=root
+PIDFile=${web_root}/novnc/utils/%H:1.pid
+ExecStart=${web_root}/novnc/utils/launch.sh --vnc 127.0.0.1:${iPortBase}1 --listen ${wPortBase}1 &
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+        systemctl daemon-reload
+
+        mkdir -p /root/.vnc  >> $OutputLOG 2>&1
+        cat << EOF > /root/.vnc/xstartup
+#!/bin/bash
+xrdb $iHome/.Xresources
+startxfce4 &
+EOF
+        chmod +x /root/.vnc/xstartup
+        prog=/usr/bin/vncpasswd
+        runuser -l root -c /usr/bin/expect >> $OutputLOG 2>&1 << EOF
+spawn "$prog"
+expect "Password:"
+send "$iPass\r"
+expect "Verify:"
+send "$iPass\r"
+expect "(y/n)?\r"
+send "n\r"
+expect dof
+exit
+EOF
+        if [[ $enable_root == 1 ]]; then
+            systemctl start  tightvnc1  >> $OutputLOG 2>&1
+            systemctl enable tightvnc1  >> $OutputLOG 2>&1
+            systemctl start  novnc1     >> $OutputLOG 2>&1
+            systemctl enable novnc1     >> $OutputLOG 2>&1
+        fi
+    fi
+
+    # Write separate systemd service
+    cat << EOF > /etc/systemd/system/tightvnc${vnc_num}@.service
+[Unit]
+Description=Remote desktop service (TightVNC)
+After=syslog.target network.target
+
+[Service]
+# VncNum ${vnc_num}
+User=%I
+#Group=${iUser}
+#PAMName=login
+#Type=forking
+
+PIDFile=/home/$iUser/.vnc/%H:${vnc_num}.pid
+ExecStartPre=/bin/sh -c "/usr/bin/vncserver -kill :${vnc_num} > /dev/null 2>&1 || :"
+ExecStart=/usr/bin/vncserver -depth 24 -geometry 1440x900 :${vnc_num}
+ExecStop=/usr/bin/vncserver -kill :${vnc_num} || :
+
+KillMode=mixed
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    cat << EOF > /etc/systemd/system/novnc${vnc_num}.service
+[Unit]
+Description=novnc websockify
+After=network.target
+
+[Service]
+Type=simple
+User=root
+PIDFile=${web_root}/novnc/utils/%H:${vnc_num}.pid
+ExecStart=${web_root}/novnc/utils/launch.sh --vnc 127.0.0.1:${iPort} --listen ${wPort} &
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload >> $OutputLOG 2>&1
+
+
+    mkdir -p ${iHome}/.vnc ${iHome}/.config            >> $OutputLOG 2>&1
+    cat << EOF > ${iHome}/.vnc/xstartup
+#!/bin/bash
+xrdb $iHome/.Xresources
+startxfce4 &
+EOF
+    chmod +x ${iHome}/.vnc/xstartup
+    chown ${iUser}:${iUser} -R /home/${iUser}/.vnc     >> $OutputLOG 2>&1
+
+    # Set VNC password
+    prog=/usr/bin/vncpasswd
+    runuser -l $iUser -c /usr/bin/expect               >> $OutputLOG 2>&1 << EOF
+spawn "$prog"
+expect "Password:"
+send "$iPass\r"
+expect "Verify:"
+send "$iPass\r"
+expect "(y/n)?\r"
+send "n\r"
+expect dof
+exit
+EOF
+    chown ${iUser}:${iUser} -R  ${iHome}/.config       >> $OutputLOG 2>&1
+
+
+    # Nginx Reverse
+    # Currently this is only for the first non-root user
+    if [[ -d /etc/nginx/apps ]]; then
+        cat << EOF > /etc/nginx/apps/vnc.conf
+location /websockify {
+  proxy_http_version 1.1;
+  proxy_pass http://127.0.0.1:$wPort/;
+  proxy_set_header Upgrade \$http_upgrade;
+  proxy_set_header Connection "upgrade";
+  proxy_read_timeout 61s;
+  proxy_buffering off;
+}
+
+location /vnc {
+  index vnc.html;
+  alias ${web_root}/novnc/;
+  try_files \$uri \$uri/ /index.php?q=\$uri&\$args;
+  auth_basic "Password Required";
+  auth_basic_user_file /etc/nginx/.htpasswd;
+}
+EOF
+        cat << EOF > /etc/nginx/conf.d/novnc.conf
+upstream novnc {
+    server 127.0.0.1:${wPort};
+}
+EOF
+        nginx -s reload      >> $OutputLOG 2>&1
+    fi
+
+    # echo -e   "$wPort\n$iPort"    >  $PortLocation/$iUser.$AppNameLower
+
+    DEBIAN_FRONTEND=noninteractive
+    systemctl enable tightvnc${vnc_num}@$iUser   >> $OutputLOG 2>&1
+    systemctl enable novnc${vnc_num}             >> $OutputLOG 2>&1
+    systemctl start  tightvnc${vnc_num}@$iUser   >> $OutputLOG 2>&1
+    systemctl start  novnc${vnc_num}             >> $OutputLOG 2>&1
+    sleep 5
+    _execute "systemctl status novnc2"
+    _execute "systemctl status tightvnc${vnc_num}@$iUser"
+
+  # To increase security, use SSH Tunnel to connet it
+    iptables -A INPUT -p tcp -s localhost --dport $iPort -j ACCEPT  >> $OutputLOG 2>&1
+    iptables -A INPUT -p tcp              --dport $iPort -j DROP    >> $OutputLOG 2>&1
+    netfilter-persistent save                                       >> $OutputLOG 2>&1
+
+    status_lock=$AppName-c
+    echo "status_lock=$status_lock" > /tmp/Variables
+    rm -f /tmp/$status_lock.1.lock /tmp/$status_lock.2.lock
+    psaux=$(ps aux)
+    if [[ $(systemctl is-active tightvnc${vnc_num}@$iUser) == active ]] && [[ $(systemctl is-active novnc2) == active ]]; then
+        touch /tmp/$status_lock.1.lock
+    elif echo $psaux | egrep -q "Xtightvnc|xfce4-session|novnc" ; then
+        touch /tmp/$status_lock.1.lock
+    else
+        touch /tmp/$status_lock.2.lock
+    fi
+    echo >> $OutputLOG
+}
+
+
+
+if [[ -d ${iHome}/.vnc ]] && [[ $force != 1 ]] ;then
+    echo -e "Configuration for $iUser already exists, skip configuration ..."
+else
+    echo_task "Configuring $AppName ..."
+    configure_novnc & spinner $!
+    check_status $status_lock
+fi
+

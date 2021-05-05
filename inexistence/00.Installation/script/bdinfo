@@ -1,0 +1,59 @@
+#!/bin/bash
+# Author: Aniverse
+#
+#################################################################################
+script_update=2020.03.29
+script_version=r11000
+
+black=$(tput setaf 0); red=$(tput setaf 1); green=$(tput setaf 2); yellow=$(tput setaf 3); blue=$(tput setaf 4)
+magenta=$(tput setaf 5); cyan=$(tput setaf 6); white=$(tput setaf 7); bold=$(tput bold); normal=$(tput sgr0) ; jiacu=${normal}${bold}
+
+outputpath=/log/bdinfo
+bdinfocli_path=/etc/abox/app/bdinfocli.exe
+mkdir -p $outputpath
+
+if [[ ! -e $bdinfocli_path ]]; then
+    mkdir -p $(dirname $bdinfocli_path)
+    wget --no-check-certificate https://github.com/Aniverse/bluray/raw/master/tools/bdinfocli.exe -qO $bdinfocli_path
+fi
+
+[[ ! `command -v mono` ]] && { echo -e "\n${bold}${red}警告 ${jiacu}未检测到 mono，因此无法扫描 BDinfo ...${normal}\n" ; exit 1 ; }
+
+
+if [[ $1 == ""  ]] || [[ ! -d $1 ]]; then
+    echo -e "\n${bold}${red}警告 ${jiacu}你必须输入 BDMV 的路径。如果路径里带空格的话还需要加上双引号${normal}\n"
+    exit 1
+fi
+
+bdmvpath=`echo "$1"`
+file_title=`basename "$bdmvpath"`
+file_title_clean="$(echo "$file_title" | tr '[:space:]' '.')"
+file_title_clean="$(echo "$file_title_clean" | sed s'/[.]$//')"
+file_title_clean="$(echo "$file_title_clean" | tr -d '(')"
+file_title_clean="$(echo "$file_title_clean" | tr -d ')')"
+file_title_clean="` echo "$file_title_clean" | sed 's/\//\./' `"
+
+echo;echo
+mono $bdinfocli_path "$bdmvpath" $outputpath
+
+[[ ! $? -eq 0 ]] && echo "${bold}运行 BDinfo 出错，退出脚本 ...${normal}" && exit 1
+
+sed -n '/QUICK SUMMARY/,//p' "${outputpath}/BDINFO.${file_title}.txt" > temptext
+count=`wc -l temptext | awk '{print $1-1}' `
+head -n $count temptext > "${outputpath}/${file_title_clean}.bdinfo.quick.summary.txt"
+rm temptext
+
+sed -n '/DISC INFO/,/FILES/p' "${outputpath}/BDINFO.${file_title}.txt" > temptext
+count=`wc -l temptext | awk '{print $1-2}' `
+head -n $count temptext > "${outputpath}/${file_title_clean}.bdinfo.main.summary.txt"
+rm temptext
+
+mv "${outputpath}/BDINFO.${file_title}.txt" "${outputpath}/${file_title_clean}.bdinfo.txt"
+
+clear
+echo -e "${bold}扫描完成。生成的 BDinfo 报告存放在 ${blue}\"${outputpath}\"${normal}"
+
+echo -e "\n${bold}${blue}---------------------------------------- BDinfo Quick Summary ----------------------------------------${normal}\n"
+if [[ ! `command -v lolcat` ]]; then cat "${outputpath}/${file_title_clean}.bdinfo.quick.summary.txt"
+else cat "${outputpath}/${file_title_clean}.bdinfo.quick.summary.txt" | lolcat ; fi
+echo -e "\n${bold}${blue}------------------------------- Just copy them, no need to download it -------------------------------${normal}\n"

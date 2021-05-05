@@ -1,0 +1,67 @@
+#!/bin/bash
+#
+# https://github.com/Aniverse/inexistence
+# Author: Aniverse
+#
+script_update=2020.07.15
+script_version=r10003
+################################################################################################
+action=$1
+iUser=$2
+if [[ -f /etc/inexistence/00.Installation/function ]]; then
+    source /etc/inexistence/00.Installation/function
+else
+    source <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/function)
+fi
+export_inexistence_info
+check_var_iUser_iPass_iHome
+################################################################################################
+app_script=ddee
+app=deluge
+app_systemd=deluged
+app_command=deluged
+app_config=$iHome/.config/deluge/core.conf
+app_log=$iHome/.config/deluge/deluged.log
+app_daemon_port=$(sed -rn 's/(.*)"daemon_port": (.*),/\2/p' $app_config)
+app_version=$($app_command --version | grep deluge | awk '{print $2}' | grep -oE "[0-9].[0-9]+.[0-9]+")
+################################################################################################
+
+show_usage() {
+
+echo -e "Usage: $app_script [action] [username]
+
+Actions:
+a            Start   ${app}
+b            Stop    ${app}
+c            Check   ${app} status
+l            View    ${app}'s log
+r            Restart ${app}
+s            Edit    ${app}'s configuration file
+x            Enable  ${app}'s auto-start after reboot
+y            Disable ${app}'s auto-start after reboot
+
+$app_script         $script_version ($script_update)
+User         $iUser
+Version      $app $app_version
+Config       $app_config
+Logfile      $app_log
+Torrents     $iHome/.config/deluge/state
+Daemon Port  $app_daemon_port
+"
+exit 0
+}
+
+[[ -z $action ]] && show_usage
+
+case $action in
+    a ) systemctl start   $app_systemd@$iUser ;;
+    b ) systemctl stop    $app_systemd@$iUser ;;
+    c ) systemctl status  $app_systemd@$iUser ;;
+    r ) systemctl restart $app_systemd@$iUser ;;
+    x ) systemctl enable  $app_systemd@$iUser ;;
+    y ) systemctl disable $app_systemd@$iUser ;;
+    h ) show_usage                            ;;
+    l ) tail -300 $app_log                    ;;
+    s ) nano +40  $app_config                 ;;
+    * ) echo -e "ERROR: Unknown action $action" ; show_usage ;;
+esac

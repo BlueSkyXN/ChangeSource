@@ -1,0 +1,109 @@
+#!/bin/bash
+#
+# https://github.com/Aniverse/inexistence
+# Author: Aniverse
+
+script_update=2020.03.02
+script_version=r10006
+
+################################################################################################ Debug
+
+usage_for_debug() {
+    export local_packages=/etc/inexistence/00.Installation
+    export s=$local_packages/package/mono/install
+    rm -f $s ; nano $s ; bash $s
+    bash <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/package/mono/install)
+}
+
+################################################################################################ Get options
+
+unset LogRootPath LogTimes DebLocation SCLocation LOCKLocation OutputLOG
+
+AppName=mono
+AppNameLower=mono
+Need_SourceCode=no
+pm_action=install
+
+function show_usage() { echo "
+$AppName $pm_action $script_version ($script_update)
+Usage:
+      -l        Specifiy LogBase (Not log file)
+      -d        Enable debug mode
+      --log     Show logfile's content"
+exit 1 ; }
+
+OPTS=$(getopt -o v:l:d -al version:,debug,logbase:,log -- "$@")
+[ ! $? = 0 ] && show_usage
+eval set -- "$OPTS"
+
+while [ -n "$1" ] ; do case "$1" in
+    -v | --version      ) version="$2"  ; shift 2 ;;
+    -l | --logbase      ) LogTimes="$2" ; shift 2 ;;
+    -d | --debug        ) debug=1       ; shift   ;;
+         --log          ) show_log=1    ; shift   ;;
+    -- ) shift ; break ;;
+esac ; done
+
+################################################################################################ Set Variables
+
+if [[ -f /etc/inexistence/00.Installation/function ]]; then
+    source /etc/inexistence/00.Installation/function
+else
+    source <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/function)
+fi
+
+set_variables_log_location
+check_var_OutputLOG
+debug_log_location
+cat_outputlog
+
+################################################################################################
+
+
+
+
+
+# http://www.mono-project.com/download/stable/#download-lin
+# https://download.mono-project.com/sources/mono/
+# http://www.mono-project.com/docs/compiling-mono/compiling-from-git/
+# https://github.com/liaralabs/swizzin/blob/master/sources/functions/mono
+
+function install_mono() {
+    echo >> $OutputLOG
+
+    if [[ $CODENAME == jessie ]]; then
+        wget -O libjpeg8.deb -nv http://ftp.fr.debian.org/debian/pool/main/libj/libjpeg8/libjpeg8_8d-1+deb7u1_amd64.deb >> $OutputLOG 2>&1
+        dpkg -i libjpeg8.deb >> $OutputLOG 2>&1
+        rm -f libjpeg8.deb
+    fi
+
+  # apt-key --keyring /etc/apt/trusted.gpg.d/mono-xamarin.gpg adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF >> $OutputLOG 2>&1
+    apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF >> $OutputLOG 2>&1
+
+  # echo "deb https://download.mono-project.com/repo/$DISTROL $CODENAME/snapshots/5.18/. main" > /etc/apt/sources.list.d/mono.list
+    if [[ $CODENAME != focal ]]; then
+        echo "deb http://download.mono-project.com/repo/$DISTROL stable-$CODENAME main" > /etc/apt/sources.list.d/mono.list
+    fi
+
+    APT_UPGRADE
+    apt_install_check mono-complete ca-certificates-mono
+    apt_install_separate # && touch /tmp/$status_lock.1.lock || touch /tmp/$status_lock.2.lock
+
+  # mono --version 2>&1 | head -n1 | awk '{print $5}'
+
+    status_lock=$AppNameLower
+    echo "status_lock=$status_lock" > /tmp/Variables
+    rm -f /tmp/$status_lock.1.lock /tmp/$status_lock.2.lock 
+    which mono > /dev/null && touch /tmp/$status_lock.1.lock || touch /tmp/$status_lock.2.lock
+    [[ -f /tmp/$status_lock.1.lock ]] && touch $LOCKLocation/$AppNameLower.lock
+
+    echo >> $OutputLOG
+}
+
+
+
+
+
+echo_task "Installing $AppName ..."
+install_mono & spinner $!
+check_status $status_lock

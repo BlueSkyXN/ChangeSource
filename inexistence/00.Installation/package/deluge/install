@@ -1,0 +1,314 @@
+#!/bin/bash
+#
+# https://github.com/Aniverse/inexistence
+# Author: Aniverse
+
+script_update=2020.07.15
+script_version=r10007
+
+################################################################################################ Debug
+
+usage_for_debug() {
+    export local_packages=/etc/inexistence/00.Installation
+    export s=$local_packages/package/deluge/configure
+    rm -f $s ; nano $s
+    bash /etc/inexistence/00.Installation/package/deluge/install -m deb -v 2.0.3
+    bash <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/package/deluge/install)
+}
+
+################################################################################################ Get options
+
+unset LogBase LogTimes SCLocation DebLocation LogLocation LOCKLocation OutputLOG \
+      AppName AppNameLower Need_SourceCode pm_action \
+      version mode debug
+
+AppName=Deluge
+AppNameLower=deluge
+AppExec=/usr/bin/deluged
+DebName=deluge-all
+Need_SourceCode=yes
+pm_action=install
+
+function show_usage() { echo "
+$AppName $pm_action $script_version ($script_update)
+Usage:
+      -v        Specifiy which version to be installed
+      -m        Install mode, can only be specified as deb, source
+      -l        Specifiy LogBase
+      -d        Enable debug mode
+"
+exit 1 ; }
+
+OPTS=$(getopt -o v:l:m:d -al mode:,version:,debug,logbase:,log -- "$@")
+[ ! $? = 0 ] && show_usage
+eval set -- "$OPTS"
+
+while [ -n "$1" ] ; do case "$1" in
+    -v | --version      ) version="$2"  ; shift 2 ;;
+    -m | --mode         ) mode="$2"     ; shift 2 ;;
+    -l | --logbase      ) LogTimes="$2" ; shift 2 ;;
+    -d | --debug        ) debug=1       ; shift   ;;
+         --log          ) show_log=1    ; shift   ;;
+         --             ) shift         ; break   ;;
+esac ; done
+
+################################################################################################ Set Variables 1
+
+if [[ -f /etc/inexistence/00.Installation/function ]]; then
+    source /etc/inexistence/00.Installation/function
+else
+    source <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/function)
+fi
+
+set_variables_log_location
+check_var_OutputLOG
+debug_log_location
+cat_outputlog
+
+script_pid=$$
+trap 'exit 1' TERM
+
+################################################################################################
+
+DE_deb_available=('2.0.3')
+git_repo="https://github.com/deluge-torrent/deluge"
+py_lt_ver=$(python -c "import libtorrent ; print libtorrent.version" 2>&1 | grep -oE [0-9.]+)
+# lt_ver=$( pkg-config --exists --print-errors "libtorrent-rasterbar >= 3.0.0" 2>&1 | awk '{print $NF}' | grep -oE [0-9.]+ )
+
+if  [[ -n $version ]] && [[ $mode == source ]]; then
+    check_remote_git_repo_branch  $git_repo  "deluge-$version"
+    source_type=tarball
+elif [[ -n $branch ]]; then
+    check_remote_git_repo_branch  $git_repo  "$branch"
+    mode=source
+    source_type=git
+elif [[ $mode == deb ]]; then
+    if [[ $version != 2.0.3 ]]; then
+        echo_warning "version changes to 2.0.3 since only this version is available"
+        version=2.0.3
+    elif [[ ! $CODENAME =~ (xenial|bionic|stretch) ]]; then
+        echo_error_exit "deb mode is not available in $CODENAME"
+    fi
+fi
+
+# need to check the version of python-libtorrent
+
+################################################################################################
+
+
+
+# python-libtorrent / python3-libtorrent will be installed from source or deb
+# https://dev.deluge-torrent.org/wiki/Installing/Source
+# https://deluge.readthedocs.io/en/latest/devguide/tutorials/01-setup.html
+# https://github.com/deluge-torrent/deluge/blob/develop/DEPENDS.md
+function install_deluge_dependencies() {
+    lines2 >> $OutputLOG
+    if [[ $deluge_major_version == 1 ]]; then
+        apt_install_dependencies python   python-openssl   python-setuptools   python-twisted   python-xdg   python-chardet  \
+                                 python-mako      python-pygame    python-glade2     python-notify                           \
+                                 intltool librsvg2-common xdg-utils geoip-database
+    elif [[ $deluge_major_version == 2 ]]; then
+        apt_install_dependencies python3  python3-openssl  python3-setuptools  python3-twisted  python3-xdg  python3-chardet \
+                                 python3-mako     python3-pygame                                                             \
+                                 intltool librsvg2-common xdg-utils geoip-database                                           \
+                                 python3-setproctitle python3-rencode  python3-pil  python3-zope.interface
+      # offical guides:          python3-geoip python3-dbus  python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-appindicator3 libnotify4
+    fi
+}
+
+
+
+
+
+
+
+function fetch_source_codes() {
+    cd $SCLocation
+    if [[ $source_type == tarball ]]; then
+        if version_ge $version 2.0 ; then
+            wget http://download.deluge-torrent.org/source/2.0/deluge-$version.tar.xz -O deluge-$version.tar.xz >> $OutputLOG 2>&1
+        else
+            wget http://download.deluge-torrent.org/source/deluge-$version.tar.gz     -O deluge-$version.tar.gz >> $OutputLOG 2>&1
+        fi
+        tar xf deluge-$version.tar*                   >> $OutputLOG 2>&1
+        rm -f deluge-$version.tar*                    >> $OutputLOG 2>&1
+        cd deluge-$version >> $OutputLOG 2>&1  || echo_error_exit "Failed to cd deluge source folder"
+    elif [[ $source_type == git ]]; then
+        git clone --depth=1 -b $branch https://github.com/deluge-torrent/deluge deluge-$version  >> $OutputLOG 2>&1
+        cd deluge-$version >> $OutputLOG 2>&1  || echo_error_exit "Failed to cd deluge source folder"
+      # version=$(git describe | cut -d- -f2)
+        sed -i 's/-dev//g' setup.cfg  >> $OutputLOG 2>&1
+    fi
+}
+
+
+
+
+
+function install_deluge_source() {
+    fetch_source_codes
+    python setup.py build >> $OutputLOG 2>&1
+    python setup.py install --install-layout=deb --record $LogLocation/deluge.filelist.txt >> $OutputLOG 2>&1
+    cd
+    rm -rf deluge-$version
+}
+
+
+
+
+
+
+
+function install_deluge_v2_deb() {
+    
+    lines2 >> $OutputLOG
+    pip3 install --upgrade twisted[tls]
+    list="deluge-common_2.0.3-1build1_all.deb
+    deluge-console_2.0.3-1build1_all.deb
+    deluge-gtk_2.0.3-1build1_all.deb
+    deluge-web_2.0.3-1build1_all.deb
+    deluged_2.0.3-1build1_all.deb"
+    mkdir -p /tmp/de_deb
+    cd /tmp/de_deb
+    for deb in $list ; do
+        wget -O $deb https://github.com/amefs/quickbox-files/raw/master/${CODENAME}/binary-amd64/deluge/$deb >> "$OutputLOG" 2>&1
+    done
+    wget https://github.com/amefs/quickbox-files/raw/master/$CODENAME/binary-amd64/libtorrent-rasterbar/python3-libtorrent_1.1.14-1build1_amd64.deb  >> $OutputLOG 2>&1
+    apt-get -y --allow-unauthenticated -f install ./*deb  >> "$OutputLOG" 2>&1
+    cd && rm -rf /tmp/de_deb
+    apt-mark hold deluge-common deluge-console deluge-gtk deluge-web deluged >> "$OutputLOG" 2>&1
+}
+
+
+function check_status_de() {
+    app_installed_ver=$(eval $AppExec --version | grep deluge | awk '{print $2}' | grep -oE "[0-9].[0-9]+.[0-9]+")
+    if [[ -z $app_installed_ver ]]; then
+        status_failed
+    elif [[ $app_installed_ver == $version ]]; then
+        status_done
+        touch $LOCKLocation/$AppNameLower.lock
+        status_done
+        restart_app
+    else
+        echo_error2 "$app_installed_ver is installed rather than $version"
+    fi
+}
+
+
+
+
+
+
+
+case $mode in
+    source  ) if [[ ! -f $LOCKLocation/deluge.dependencies.lock ]]; then
+                  echo_task "Installing deluge build dependencies ..."
+                  install_deluge_dependencies & spinner $!
+                  check_status
+              fi
+
+              echo_task "Installing deluge ${bold}${cyan}$version${normal} from source codes ..."
+              install_deluge_source & spinner $!
+              check_status_de
+              ;;
+    deb     ) echo_task "Installing deluge ${bold}${cyan}$version${normal} from pre-built deb ..."
+              install_deluge_v2_deb & spinner $!
+              check_status_de
+              ;;
+esac
+
+
+
+
+
+
+
+
+
+###################### deprecated ######################
+
+function deprecated_codes() {
+
+    [[ $DESSL == Yes ]] && { deluge_old_version_ssl_fix && deluge_install_diff ; version_o=$version ; version=1.3.15 && fetch_source_codes ; }
+    if [[ $DESSL == Yes ]]; then
+        mv -f $SCLocation/deluge-$version_o-tmp/bin/deluged /usr/bin/deluged
+        rm -rf deluge-$version ; version=$version_o
+        rm -rf $DeTmpPath
+    fi
+
+[[ $CODENAME != focal ]] /usr/local/bin/pip install --upgrade twisted pillow rencode pyopenssl >> $OutputLOG 2>&1
+
+# Check if input version is available
+DeSource="http://download.deluge-torrent.org/source"
+AvailableVersion=$(  wget -qO- $DeSource | grep -o "deluge-[0-9]\{1,2\}\.[0-9]\{1,2\}\.[0-9]\{1,2\}\.tar.gz" | sort -uV | grep -o "[0-9]\{1,2\}\.[0-9]\{1,2\}\.[0-9]\{1,2\}"  )
+[[ -n $version ]] && [[ -z $( echo $AvailableVersion | grep $version ) ]] && { echo -e "\n${CW} The version you input is not available!\n" ; exit 1 ; }
+
+# Check if ssl issue should be fix
+version_ge $version 1.3.11 || DESSL=Yes
+
+# Check if libtorrent below 1.1.12 is supported
+version_ge $version 2.0  && export lt8_support=No || lt8_support=Yes
+[[ -n $py_lt_ver ]] && version_ge $lt_ver 1.1.3 && lt_ver_newer=Yes || lt_ver_newer=No
+[[ $lt8_support == No ]] && [[ $lt_ver_newer == No ]] && echo -e "\n${CW} libtorrent-rasterbar 1.1.3 and above is required when installing deluge 2.0 and above${normal}\n" && exit 1
+
+case $mode in
+    apt     ) echo -ne "Installing deluge ${bold}${cyan}$version${normal} from repository ..."       | tee -a $OutputLOG ; install_deluge_apt & spinner $!
+              ;;
+    ppa     ) echo -ne "Installing deluge ${bold}${cyan}$latest_stable${normal} from stable ppa ..." | tee -a $OutputLOG ; install_deluge_ppa & spinner $!
+              ;;
+esac
+
+}
+
+# Install from repository
+function install_deluge_apt() {
+    version=$( apt-cache policy deluge | grep -B1 http | grep -Eo "[012]\.[0-9]+.[0-9]+" | head -n1 )
+    if [[ -z $version ]]; then
+        [[ $CODENAME == bionic ]] && version=1.3.15 ; [[ $CODENAME == xenial ]]  && version=1.3.12 ; [[ $CODENAME == trusty ]] && version=1.3.6
+        [[ $CODENAME == buster ]] && version=1.3.15 ; [[ $CODENAME == stretch ]] && version=1.3.13 ; [[ $CODENAME == jessie ]] && version=1.3.10
+    fi
+    apt-get install -y deluge deluged deluge-web deluge-console deluge-gtk >> $OutputLOG 2>&1 && touch /tmp/de.1.lock || touch /tmp/de.2.lock
+}
+
+# Install from PPA
+function install_deluge_ppa() {
+    latest_stable=` wget -qO- https://dev.deluge-torrent.org/wiki/ReleaseNotes | grep wiki/ReleaseNotes | grep -Eo "[12]\.[0-9.]+" | sed 's/">/ /' | awk '{print $1}' | head -n1 `
+    [[ -z $latest_stable ]] && latest_stable=1.3.15
+    if   [[ $DISTRO == Debian ]]; then
+        echo 'deb http://ppa.launchpad.net/deluge-team/ppa/ubuntu trusty main'        >> /etc/apt/sources.list
+        apt-get update                                                                >> $OutputLOG 2>&1
+        apt-get install -t trusty deluge deluged deluge-web deluge-console deluge-gtk >> $OutputLOG 2>&1 && touch /tmp/de.1.lock || touch /tmp/de.2.lock
+    elif [[ $DISTRO == Ubuntu ]]; then
+        add-apt-repository -y ppa:deluge-team/ppa         >> $OutputLOG 2>&1
+        apt-get update                                    >> $OutputLOG 2>&1
+      # apt-get install python-libtorrent                 >> $OutputLOG 2>&1
+      # apt-get install -y --allow-change-held-packages --allow-downgrades libtorrent-rasterbar8=1.0.11-1~xenial~ppa1.1 python-libtorrent=1.0.11-1~xenial~ppa1.1 >> $OutputLOG 2>&1
+      # apt-mark hold python-libtorrent                   >> $OutputLOG 2>&1
+      # apt-mark hold libtorrent-rasterbar8               >> $OutputLOG 2>&1
+        apt-get install -t trusty deluge deluged deluge-web deluge-console deluge-gtk >> $OutputLOG 2>&1 && touch /tmp/de.1.lock || touch /tmp/de.2.lock
+    fi
+}
+
+# Install another version of deluge (e.g. 1.3.9 for KeepFRDS)
+# Have bugs to be fixed
+function install_deluge_alt() {
+    fetch_source_codes
+    [[ $DESSL == Yes ]] && deluge_old_version_ssl_fix
+    deluge_install_diff
+    mv -f $SCLocation/deluge-$version-tmp/bin/deluged /usr/bin/deluged2 && touch /tmp/de.1.lock || touch /tmp/de.2.lock
+    rm -rf $DeTmpPath
+}
+
+# Fix older deluged ssl issue
+function deluge_old_version_ssl_fix() {
+    sed -i "s/SSL.SSLv3_METHOD/SSL.SSLv23_METHOD/g" deluge/core/rpcserver.py
+    sed -i "/        ctx = SSL.Context(SSL.SSLv23_METHOD)/a\        ctx.set_options(SSL.OP_NO_SSLv2 & SSL.OP_NO_SSLv3)" deluge/core/rpcserver.py
+}
+    
+# Install deluged to another path which is $SCLocation/deluge-$version-tmp/bin/deluged
+function deluge_install_diff() {
+    DeTmpPath=$SCLocation/deluge-$version-tmp
+    DeTmpPath2=$SCLocation/deluge-$version-tmp/lib/python2.7/site-packages
+    mkdir -p $DeTmpPath2
+    PYTHONPATH=$DeTmpPath2 python setup.py install --prefix=$DeTmpPath >> $OutputLOG 2>&1
+}

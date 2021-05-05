@@ -1,0 +1,1240 @@
+#!/bin/bash
+#
+# https://github.com/Aniverse/inexistence
+# Author: Aniverse
+#
+# script_update=2020.08.31
+# script_version=r14142
+# This var will recover other script's var when source
+################################################################################################ Usage Guide
+
+usage_guide() {
+    s=/etc/inexistence/00.Installation/function;rm -f $s ; nano $s
+    wget -q https://github.com/Aniverse/inexistence/raw/master/00.Installation/function -O /etc/inexistence/00.Installation/function
+
+    if [[ -f /etc/inexistence/00.Installation/function ]]; then
+        source /etc/inexistence/00.Installation/function
+    else
+        source <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/function)
+    fi
+}
+
+################################################################################################ Colors
+
+black=$(tput setaf 0)    ; red=$(tput setaf 1)          ; green=$(tput setaf 2)    ; yellow=$(tput setaf 3) ;  bold=$(tput bold)
+blue=$(tput setaf 4)     ; magenta=$(tput setaf 5)      ; cyan=$(tput setaf 6)     ; white=$(tput setaf 7)  ;  normal=$(tput sgr0)
+on_black=$(tput setab 0) ; on_red=$(tput setab 1)       ; on_green=$(tput setab 2) ; on_yellow=$(tput setab 3)
+on_blue=$(tput setab 4)  ; on_magenta=$(tput setab 5)   ; on_cyan=$(tput setab 6)  ; on_white=$(tput setab 7)
+shanshuo=$(tput blink)   ; wuguangbiao=$(tput civis)    ; guangbiao=$(tput cnorm)  ; jiacu=${normal}${bold}
+underline=$(tput smul)   ; reset_underline=$(tput rmul) ; dim=$(tput dim)
+standout=$(tput smso)    ; reset_standout=$(tput rmso)  ; title=${standout}
+baihuangse=${white}${on_yellow} ; bailanse=${white}${on_blue} ; bailvse=${white}${on_green}
+baiqingse=${white}${on_cyan}    ; baihongse=${white}${on_red} ; baizise=${white}${on_magenta}
+heibaise=${black}${on_white}    ; heihuangse=${on_yellow}${black}
+CW="${bold}${baihongse} ERROR ${jiacu}" ; ZY="${baihongse}${bold} ATTENTION ${jiacu}" ; JG="${baihongse}${bold} WARNING ${jiacu}"
+
+################################################################################################
+
+LogBase=/log/inexistence
+LogRootPath=/log/inexistence
+LOCKLocation=$LogBase/.lock
+PortLocation=$LogBase/port
+inexistence_url="https://github.com/Aniverse/inexistence"
+inexistence_branch=master
+inexistence_files=/etc/inexistence.files
+local_repo=/etc/inexistence
+local_packages=$local_repo/00.Installation
+local_script=/usr/local/bin/abox
+web_root=/var/www
+web_rutorrent=/var/www/rutorrent
+tmp_dir=/tmp
+export TZ=/usr/share/zoneinfo/Asia/Shanghai
+export DEBIAN_FRONTEND=noninteractive
+export APT_LISTCHANGES_FRONTEND=none
+[[ -z $MAXCPUS ]] && MAXCPUS=$(nproc)
+if [[ $MAXCPUS == 1 ]]; then
+    unset compile_flag_threads
+else
+    compile_flag_threads=-j$MAXCPUS
+fi
+
+self_location="$0"
+
+################################################################################################ OS Check
+
+get_opsy() {
+    [ -f /etc/redhat-release ] && awk '{print ($1,$3~/^[0-9]/?$3:$4)}' /etc/redhat-release && return
+    [ -f /etc/os-release ] && awk -F'[= "]' '/PRETTY_NAME/{print $3,$4,$5}' /etc/os-release && return
+    [ -f /etc/lsb-release ] && awk -F'[="]+' '/DESCRIPTION/{print $2}' /etc/lsb-release && return
+}
+
+has_cmd() {
+    local cmd="$1"
+    if  eval type type > /dev/null 2>&1; then
+        eval type "$cmd" > /dev/null 2>&1
+    elif command > /dev/null 2>&1; then
+         command -v "$cmd" > /dev/null 2>&1
+    else
+        which "$cmd" > /dev/null 2>&1
+    fi
+    local rt=$?
+    return ${rt}
+}
+
+running_kernel=$(uname -r 2>&1 )
+arch=$(uname -m 2>&1)
+if has_cmd "getconf"; then
+    lbit=$( getconf LONG_BIT )
+else
+    echo ${arch} | grep -q "64" && lbit="64" || lbit="32"
+fi
+[[ -z $arch ]] && arch=$(echo "x$(getconf LONG_BIT)")
+
+DISTRO=$(awk -F'[= "]' '/PRETTY_NAME/{print $3}' /etc/os-release)
+DISTROL=$(echo $DISTRO | tr 'A-Z' 'a-z')
+[[ $DISTRO =~ (Ubuntu|Debian) ]] && CODENAME=$(cat /etc/os-release | grep VERSION= | tr '[A-Z]' '[a-z]' | sed 's/\"\|(\|)\|[0-9.,]\|version\|lts//g' | awk '{print $2}' | head -1)
+[[ $DISTRO == Ubuntu ]] && osversion=$(grep Ubuntu /etc/issue | head -1 | grep -oE  "[0-9.]+")
+[[ $DISTRO == Debian ]] && osversion=$(cat /etc/debian_version)
+[[ ! $DISTRO =~ (Ubuntu|Debian) ]] && DISTRO=$(get_opsy)
+
+################################################################################################ Shared seedbox check
+
+if [[ $shared == 1 ]]; then
+    iUser=$(whoami)
+    tmp_dir=$HOME/.tmp
+    mkdir -p $tmp_dir
+    if [[ $(pgrep systemd) ]]; then
+        export user_systemd=1
+        mkdir -p $HOME/.config/systemd/user
+    fi
+fi
+
+################################################################################################
+################################################################################################ Basic functions
+################################################################################################
+
+# ⚠ ➜ ✗ ✓
+function _execute() {
+    { echo -e "${yellow}${bold}$1${normal}" ; lines ; } >> "$OutputLOG" 2>&1
+    ($1   >> "$OutputLOG" 2>&1)
+    lines >> "$OutputLOG"
+}
+function echo_task() {
+    printf "%s" "$@" | tee -a "$OutputLOG" # echo -ne "$1" | tee -a "$OutputLOG"
+    echo >> "$OutputLOG"
+}
+function echo_doing() {
+    printf "%s" "$@" | tee -a "$OutputLOG"
+    echo | tee -a "$OutputLOG"
+}
+function status_done() {
+    echo -e " ${green}${bold}DONE${normal}" | tee -a "$OutputLOG"
+}
+function status_failed() {
+    echo -e " ${red}${bold}FAILED${normal}" | tee -a "$OutputLOG"
+}
+function echo_warning() {
+    printf " ${yellow}${bold}WARNING: %s${normal}\n" "$@" | tee -a "$OutputLOG"
+}
+function echo_error() {
+    printf " ${red}${bold}ERROR: %s${normal}\n" "$@" | tee -a "$OutputLOG"
+}
+function echo_error2() {
+    echo -e "${red}${bold}ERROR:" "$*${normal}"
+}
+function echo_error_exit() {
+    printf " ${red}${bold}ERROR: %s${normal}\n" "$@" | tee -a "$OutputLOG" ; exit 1
+}
+function echo_info() {
+    printf " ${cyan}${bold}Info: %s${normal}\n" "$@" | tee -a "$OutputLOG"
+}
+function echo_log_only() {
+    printf "${cyan}DEBUG: %s${normal}\n" "$@" >> $OutputLOG
+}
+
+# These codes are from teddysun
+function version_ge(){ test "$(echo "$@" | tr " " "\n" | sort -rV | head -1)" == "$1" ; }
+function version_gt(){ test "$(printf '%s\n' "$@" | sort -V | head -1)" != "$1"; }
+function lines ()  { printf "%-100s\n" "-" | sed 's/\s/-/g' ; }
+function lines2() { echo ; printf "%-100s\n" "-" | sed 's/\s/-/g' ; echo ; }
+
+# These codes are from rtinst, check if a web site is reachable
+function check_url() {
+    if [[ `wget -S --spider $1 2>&1 | grep 'HTTP/1.1 200 OK'` ]]; then return 0 ; else return 1 ; fi
+}
+
+# These codes are from QuickBox
+function spinner() {
+    local pid=$1
+    local delay=0.25
+    local spinstr='|/-\'
+    while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
+        local temp=${spinstr#?}
+        printf " [${bold}${yellow}%c${normal}]  " "$spinstr"
+        local spinstr=$temp${spinstr%"$temp"}
+        sleep $delay
+        printf "\b\b\b\b\b\b"
+    done
+    printf "    \b\b\b\b"
+}
+
+
+function check_var_iUser_iPass_iHome() {
+    [[ -n $iUser ]] && id -u $iUser >/dev/null 2>&1 || { echo -e "ERROR: User $iUser doesn't exist" ; exit 1 ; }
+    [[ -z $iUser || -z $iPass ]] && { echo -e "ERROR: Please specify username and password" ; exit 1 ; }
+    # [[ -z $iHome ]] && [[ $iUser == root ]] && iHome=/root
+    # [[ -z $iHome ]] && [[ $iUser != root ]] && iHome=/home/$iUser
+    # iHome=$(grep $iUser /etc/passwd | awk -F':' '{print $(NF-1)}')
+    iHome=$(eval echo "~$iUser")
+    [[ ! -d $iHome ]] && { echo -e "ERROR: User home not found" ; exit 1 ; }
+}
+
+
+function check_var_OutputLOG() {
+    if [[ -z $OutputLOG ]]; then
+        echo -e "${CW} NO OutputLOG variable found, please check if you have function installed"
+        exit 1
+    else
+        echo -n "$OutputLOG" > /tmp/current.logfile
+    fi
+}
+
+
+# This is used for old functions who used to log via tee -a
+function write_current_logfile() {
+    local OutputLOG=$1
+    if [[ -z $OutputLOG ]] ; then
+        echo -e "${CW} NO OutputLOG variable found, please check it"
+    fi
+    echo -n "$OutputLOG" > /tmp/current.logfile
+}
+
+
+# This is used for testing
+function loggg() {
+    OutputLOG=$1
+    echo -n "$OutputLOG" > /tmp/current.logfile
+}
+
+
+function generate_status_lock () {
+    status_lock=$AppNameLower
+    echo "status_lock=$status_lock" > /tmp/Variables
+    rm -f /tmp/$status_lock.1.lock /tmp/$status_lock.2.lock 
+    eval $AppTest > /dev/null 2>&1 && touch /tmp/$status_lock.1.lock || touch /tmp/$status_lock.2.lock
+    [[ -f /tmp/$status_lock.1.lock ]] && touch $LOCKLocation/$AppNameLower.lock
+}
+
+
+function check_status() {
+    # When install_app & spinner $!, the variable $status_lock will not be passed to the install script, so we use another file to source
+    if [[ -f $tmp_dir/Variables ]]; then
+        source $tmp_dir/Variables
+    fi
+
+    if [[ -z "${status_lock}" ]]; then
+        # echo -e " ${red}${bold}ERROR: No Variables${normal}"
+        echo_error "No Variables"
+    elif [[ -f $tmp_dir/"${status_lock}".1.lock ]]; then
+        # echo -e " ${green}${bold}DONE${normal}"
+        status_done
+    elif [[ -f $tmp_dir/"${status_lock}".2.lock ]]; then
+        # echo -e " ${red}${bold}FAILED${normal}"
+        status_failed
+    else
+        # echo -e " ${red}${bold}ERROR: Unknown State${normal}"
+        echo_error "Unknown State"
+    fi
+}
+
+
+function set_variables_log_location() {
+    if [[ $shared == 1 ]]; then
+        LogTimes=$HOME/.log
+        LogLocation=$HOME/.log
+        mkdir -p $LogLocation
+        OutputLOG=$LogLocation/$pm_action.$AppNameLower.txt
+    elif [[ -z $LogTimes ]]; then
+        LogTimes=$LogRootPath/single
+        LogLocation=$LogTimes/log
+        OutputLOG=$LogLocation/$pm_action.$AppNameLower.txt
+    elif [[ $LogTimes == none ]]; then
+        LogTimes=/tmp/ttmmpp
+        OutputLOG="/dev/null"
+    else
+        LogLocation=$LogTimes/log
+        OutputLOG=$LogTimes/log/$pm_action.$AppNameLower.txt
+    fi
+
+    if [[ $pm_action != uninstall ]]; then
+        [[ $Need_SourceCode == yes ]] && SCLocation=$LogTimes/source
+        DebLocation=$LogRootPath/deb
+    fi
+
+    if [[ -z $shared ]]; then
+        mkdir -p $LogRootPath $LogTimes $DebLocation $SCLocation $LOCKLocation $LogLocation $PortLocation
+    fi
+    { lines ; echo -e "$(date "+%Y.%m.%d %H:%M:%S") $AppName $pm_action" ; lines ; } >> $OutputLOG
+
+    if [[ -n $SCLocation ]] && [[ $pm_action != uninstall ]]; then
+        cd $SCLocation
+    else
+        cd /tmp
+    fi
+}
+
+
+function add_local_script_to_PATH() {
+    if ! grep $local_script /etc/bash.bashrc -q ; then
+        echo "export PATH=$local_script:$PATH" >> /etc/bash.bashrc
+    fi
+}
+
+
+function stop_app() {
+    if [[ -f /log/inexistence/iUser.txt ]] && [[ -f $LOCKLocation/$AppNameLower.lock ]]; then
+        for user in $(cat /log/inexistence/iUser.txt 2>/dev/null) ; do
+           echo -e "Stop user ${user}'s $AppNameLower progress ..." | tee -a $OutputLOG
+           systemctl stop $AppNameLower@$user >> $OutputLOG 2>&1
+        done
+    fi
+}
+
+
+function restart_app() {
+    if [[ -f /log/inexistence/iUser.txt ]] && [[ -f $LOCKLocation/$AppNameLower.lock ]]; then
+        for user in $(cat /log/inexistence/iUser.txt 2>/dev/null) ; do
+           echo -e "Restarting $AppNameLower for user $user" | tee -a $OutputLOG
+           systemctl restart $AppNameLower@$user >> $OutputLOG 2>&1
+        done
+    fi
+}
+
+
+function install_base () {
+    local appname=$1
+    local logfile=$(cat /tmp/current.logfile)
+  # extraarg="${*:1}"
+    if [[ ! -f $LOCKLocation/$appname.lock ]]; then
+        if [[ -f /etc/inexistence/00.Installation/package/$appname ]]; then
+            bash /etc/inexistence/00.Installation/package/$appname --logbase $LogTimes ${*:2}
+        else
+            bash <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/package/$appname) --logbase $LogTimes ${*:2}
+        fi
+    fi
+    echo -n "$logfile" > /tmp/current.logfile # restore logfile, as $OutputLOG has been updated in sub-script
+}
+
+
+# Usage: app_manager qbittorrent install   -v 4.2.1 --debug
+# Usage: app_manager qbittorrent configure -u someone -p teleph0ne -w 7451 -i 9152
+function app_manager () {
+    local app_name=$1
+    local app_action=$2
+    local logfile=$(cat /tmp/current.logfile)
+    if [[ ! -d $LOCKLocation/$appname.lock ]]; then
+        if [[ -f /etc/inexistence/00.Installation/package/$app_name/$app_action ]]; then
+            bash /etc/inexistence/00.Installation/package/$app_name/$app_action --logbase $LogTimes ${*:3}
+        else
+            rm -rf /tmp/app_manager && mkdir -p /tmp/app_manager && cd /tmp/app_manager
+            wget https://github.com/Aniverse/inexistence/raw/master/00.Installation/package/$app_name/$app_action > /dev/null 2>&1
+            if [[ -f /tmp/app_manager/$app_action ]]; then
+                bash $app_action --logbase $LogTimes ${*:3}
+            else
+                echo_error_exit "Action ${app_action} for $app_name doesn't exist"
+            fi
+        fi
+    fi
+    echo -n "$logfile" > /tmp/current.logfile # restore logfile, as $OutputLOG has been updated in sub-script
+}
+
+
+function check_if_succeed(){
+    local wait=$1
+    local command="$2"
+    local seconds=0
+    unset waits
+    while ( ! eval "$command" > /dev/null 2>&1 ) ; do
+        seconds=$(( $seconds + 1 ))
+        sleep 1
+        if [[ $seconds == $wait ]]; then
+            echo
+            return 1
+            export waits=$wait
+        fi
+    done
+    export waits=$seconds
+    return 0
+}
+
+
+function swap_on () { dd if=/dev/zero of=/root/.swapfile bs=1M count=2048 ; mkswap /root/.swapfile ; swapon /root/.swapfile ; swapon -s ; }
+function swap_off() { swapoff /root/.swapfile ; rm -f /root/.swapfile ; }
+
+function _time() {
+    local timeWORK=$1
+    endtime=$(date +%s)
+    timeused=$(( $endtime - $starttime ))
+    if [[ $timeused -gt 60 && $timeused -lt 3600 ]]; then
+        timeusedmin=$(expr $timeused / 60)
+        timeusedsec=$(expr $timeused % 60)
+        echo -e " ${baiqingse}${bold}The $timeWORK took about ${timeusedmin} min ${timeusedsec} sec${normal}"
+    elif [[ $timeused -ge 3600 ]]; then
+        timeusedhour=$(expr $timeused / 3600)
+        timeusedmin=$(expr $(expr $timeused % 3600) / 60)
+        timeusedsec=$(expr $timeused % 60)
+        echo -e " ${baiqingse}${bold}The $timeWORK took about ${timeusedhour} hour ${timeusedmin} min ${timeusedsec} sec${normal}"
+    else
+        echo -e " ${baiqingse}${bold}The $timeWORK took about ${timeused} sec${normal}"
+    fi
+}
+
+
+################################################################################################
+################################################################################################ User-related
+################################################################################################
+
+
+function hezi_add_user() {
+    iUser=$1
+    iPass=$2
+    local passphrase
+    passphrase=$(openssl rand -hex 64)
+    mkdir -p /log/inexistence/users
+    if [[ "$CODENAME" =~ (jessie|xenial|stretch) ]]; then
+        echo "${iUser}:$(echo "${iPass}" | openssl enc -aes-128-ecb -a -e -pass pass:"${passphrase}" -nosalt)"         > /log/inexistence/users/${iUser}.info
+    else
+        echo "${iUser}:$(echo "${iPass}" | openssl enc -aes-128-ecb -pbkdf2 -a -e -pass pass:"${passphrase}" -nosalt)" > /log/inexistence/users/${iUser}.info
+    fi
+    mkdir -p /root/.ssh/users
+    echo "${passphrase}" > /root/.ssh/users/${iUser}
+    chmod 600 /root/.ssh/users/${iUser} && chmod 700 /root/.ssh
+    if ! id -u "${iUser}" >/dev/null 2>&1; then
+        useradd "${iUser}" -m -G www-data -s /bin/bash
+        chpasswd <<< "${iUser}:${iPass}"
+    fi
+    if ! groups $iUser | grep -qE ' sudo(\s|$)'; then
+        adduser $iUser sudo
+    fi
+    # echo "${iUser} ALL=(ALL:ALL) ALL" >> /etc/sudoers.d/inexistence
+}
+
+
+function _confirmation(){
+    local answer
+    while true ; do
+        read answer
+        case $answer in [yY] | [yY][Ee][Ss] | "" ) return 0 ;;
+                        [nN] | [nN][Oo]          ) return 1 ;;
+                        *                        ) echo "${bold}Please enter ${bold}${green}[Y]es${normal} or [${bold}${red}N${normal}]o";;
+        esac
+    done
+}
+
+
+function genpasswd() { local genln=$1 ; [ -z "$genln" ] && genln=12 ; tr -dc A-Za-z0-9 < /dev/urandom | head -c ${genln} | xargs ; }
+
+
+function ask_username(){
+    clear
+    validate_username $iUser
+    if [[ $username_valid == empty ]]; then
+        echo -e "${bold}${yellow}The script needs a username${jiacu}"
+        echo -e "This will be your primary user. It can be an existing user or a new user ${normal}"
+        ask_input_username
+    elif [[ $username_valid == false ]]; then
+      # echo -e "${JG} The preset username doesn't pass username check, please set a new username"
+        ask_input_username
+    elif [[ $username_valid == true ]]; then
+      # iUser=`  echo $iUser | tr 'A-Z' 'a-z'  `
+        echo -e "${bold}Username sets to ${blue}$iUser${normal}\n"
+    fi
+}
+
+
+function ask_input_username(){
+    local answerusername ; local reinput_name
+    confirm_name=false
+    while [[ $confirm_name == false ]]; do
+        while [[ $answerusername = "" ]] || [[ $reinput_name = true ]] || [[ $username_valid = false ]]; do
+            reinput_name=false
+            read -ep "${bold}Enter username: ${blue}" answerusername ; echo -n "${normal}"
+            validate_username $answerusername
+        done
+
+        addname=$answerusername
+        echo -n "${normal}${bold}Confirm that username is ${blue}${addname}${normal}, ${bold}${green}[Y]es${normal} or [${bold}${red}N${normal}]o? "
+        read answer
+        case $answer in [yY] | [yY][Ee][Ss] | "" ) confirm_name=true ;;
+                        [nN] | [nN][Oo]          ) reinput_name=true ;;
+                        *                        ) echo "${bold}Please enter ${bold}${green}[Y]es${normal} or [${bold}${red}N${normal}]o" ;;
+        esac
+
+        iUser=$addname
+    done
+    echo
+}
+
+
+# 一定程度上的密码复杂度检测：https://stackoverflow.com/questions/36524872/check-single-character-in-array-bash-for-password-generator
+# 询问密码。目前的复杂度判断还不够 Flexget 的程度，但总比没有强……
+function ask_password() {
+    local password1 ; local password2 ; #local exitvalue=0
+    exec 3>&1 >/dev/tty
+
+    if [[ $iPass = "" ]]; then
+        echo "${bold}${yellow}The script needs a password, it will be used for Unix and WebUI${jiacu} "
+        echo "The password must consist of characters and numbers and at least 8 chars,"
+        echo "or you can leave it blank to generate a random password"
+        while [ -z $localpass ]; do
+            read -ep "${jiacu}Enter the password: ${blue}" password1 ; echo -n "${normal}"
+    
+            if [ -z $password1 ]; then
+                localpass=$(genpasswd) ; # exitvalue=1
+                echo "${jiacu}Random password sets to ${blue}$localpass${normal}"
+            elif [ ${#password1} -lt 8 ]; then # At least [8] chars long
+                echo "${bold}${red}ERROR${normal} ${bold}Password must be at least ${red}[8]${jiacu} chars long${normal}" && continue
+            elif ! echo "$password1" | grep -q '[0-9]'; then # At least [1] number
+                echo "${bold}${red}ERROR${normal} ${bold}Password must have at least ${red}[1] number${normal}" && continue
+            elif ! echo "$password1" | grep -q '[a-zA-Z]'; then # At least [1] letter
+                echo "${bold}${red}ERROR${normal} ${bold}Password must have at least ${red}[1] letter${normal}" && continue
+            else
+                while [[ $password2 = "" ]]; do
+                    read -ep "${jiacu}Enter the new password again: ${blue}" password2 ; echo -n "${normal}"
+                done
+                if [ $password1 != $password2 ]; then
+                    echo "${bold}${red}WARNING${normal} ${bold}Passwords do not match${normal}" ; unset password2
+                else
+                    localpass=$password1
+                fi
+            fi
+        done
+        iPass=$localpass
+        exec >&3- ; echo ; # return $exitvalue
+    else
+        echo -e "${bold}Password sets to ${blue}$iPass${normal}\n"
+    fi
+}
+
+
+# https://github.com/Azure/azure-devops-utils
+function validate_username() {
+    iUser="$1" ; local min=1 ; local max=32
+    # This list is not meant to be exhaustive. It's only the list from here: https://docs.microsoft.com/azure/virtual-machines/linux/usernames
+    local reserved_names=('adm' 'admin' 'audio' 'backup' 'bin' 'cdrom' 'crontab' 'daemon' 'dialout' 'dip' 'disk' 'fax' 'floppy' 'fuse' 'games' 'gnats' 'irc' 'kmem' 'landscape' 'libuuid' 'list' 'lp' 'mail' 'man' 'messagebus' 'mlocate' 'netdev' 'news' 'nobody' 'nogroup' 'none' 'null' 'operator' 'plugdev' 'proxy' 'root' 'sasl' 'shadow' 'src' 'ssh' 'sshd' 'staff' 'sudo' 'sync' 'sys' 'syslog' 'tape' 'tty' 'users' 'utmp' 'uucp' 'video' 'voice' 'whoopsie' 'www-data')
+    if [ -z "$iUser" ]; then
+        username_valid=empty
+    elif [ ${#iUser} -lt $min ] || [ ${#username} -gt $max ]; then
+        echo -e "${CW} The username must be between $min and $max characters${normal}"
+        username_valid=false
+    elif ! [[ "$iUser" =~ ^[a-z][-a-z0-9_]*$ ]]; then
+        echo -e "${CW} The username must contain only lowercase letters, digits, underscores and starts with a letter${normal}"
+        username_valid=false
+    elif [[ $(echo "${reserved_names[@]}" | grep -wq "$iUser") ]]; then
+        echo -e "${CW} The username cannot be an Ubuntu reserved name${normal}"
+        username_valid=false
+    else
+        username_valid=true
+    fi
+}
+
+
+function export_inexistence_info() {
+    inexistence_ver=$( cat /log/inexistence/info/version.txt 2>/dev/null | grep inexistence.version  | awk '{print $NF}' | head -1)
+    inexistence_date=$(cat /log/inexistence/info/version.txt 2>/dev/null | grep inexistence.update   | awk '{print $NF}' | head -1)
+    asnnnnn=$(cat $LogBase/info/asn.txt 2>/dev/null)
+    serveripv4=$(cat $LogBase/info/serveripv4.txt 2>/dev/null)
+    serveripv6=$(cat $LogBase/info/serveripv6.txt 2>/dev/null)
+    [[ -f /log/inexistence/.lock/tweaks.lock ]] && tweaks_enabled=1
+
+    DefaultiUser=$(cat /log/inexistence/info/installed.user.list.txt 2>/dev/null | head -1)
+    [[ -z $iUser ]] && iUser=$DefaultiUser
+    iHome=$(eval echo "~$iUser")
+    passphrase=$(cat /root/.ssh/users/${iUser} 2>/dev/null)
+    passtext=$(cat /log/inexistence/users/${iUser}.info 2>/dev/null | cut -d: -f2)
+    if [[ "$CODENAME" =~ (jessie|xenial|stretch) ]]; then
+        iPass=$(echo ${passtext} | openssl enc -aes-128-ecb -a -d -pass pass:${passphrase} -nosalt 2>/dev/null)
+    else
+        iPass=$(echo ${passtext} | openssl enc -aes-128-ecb -pbkdf2 -a -d -pass pass:${passphrase} -nosalt 2>/dev/null)
+    fi
+}
+
+
+function backup_old_config() {
+    local appname=$1
+    if [[ -d $iHome/.config/$appname ]]; then
+        mv     $iHome/.config/$appname  $iHome/.config/$appname.old.backup.$(date "+%Y.%m.%d.%H.%M.%S")  >> $OutputLOG 2>&1
+        rm -rf $iHome/.config/$appname  >> $OutputLOG 2>&1
+    fi
+}
+
+
+function create_log_link() {
+    set_log_when_there_is_none
+    mkdir -p $iHome/inexistence/log
+    cd       $iHome/inexistence/log
+    list="../../.config/deluge/deluged.log
+          ../../.config/deluge/deluge-web.log
+          ../../.config/qBittorrent/qbittorrent.log
+          ../../.config/transmission-daemon/transmission.log
+          ../../.config/flexget/flexget.log
+          ../../.config/autoremove-torrents/autoremove-torrents.log
+         "
+    for log in $list ; do
+        if [[ -f $log ]] && ! [[ -f $iHome/inexistence/log/$(basename $log) ]]; then
+           ln -s $log $(basename $log) >> $OutputLOG 2>&1
+        fi
+    done
+}
+
+function config_link_rename() {
+    local config=$1
+    local app=$(dirname $config | awk -F'/' '{print $NF}')
+    [[ $app =~ (qBittorrent|rclone) ]] && app=""
+    [[ $app == transmission-daemon  ]] && app="transmission"
+    [[ -n $app ]] && app="$(echo "${app}.")"
+    target=$(echo "${app}$(basename $config)")
+    echo "$config" | grep -q rtorrent && target=rtorrent.rc
+    echo "$config" | grep -q autodl   && target=autodl.cfg
+    echo "$target"
+}
+
+function create_config_link() {
+    set_log_when_there_is_none
+    mkdir -p $iHome/inexistence/config
+    cd       $iHome/inexistence/config
+    list="../../.config/deluge/core.conf
+          ../../.config/deluge/web.conf
+          ../../.config/qBittorrent/qBittorrent.conf
+          ../../.config/transmission-daemon/settings.json
+          ../../.config/flexget/config.yml
+          ../../.config/autoremove-torrents/config.yml
+          ../../.config/rclone/rclone.conf
+          ../../.rtorrent.rc
+          ../../.autodl/autodl.cfg
+         "
+    for config in $list ; do
+        if [[ -f $config ]] && ! [[ -f $iHome/inexistence/config/$(config_link_rename $config) ]]; then
+           ln -s $config $(config_link_rename $config) >> $OutputLOG 2>&1
+        fi
+    done
+}
+
+
+################################################################################################
+################################################################################################ APT-GET
+################################################################################################
+
+
+function apt_sources_replace() {
+    if [[ $DISTRO == Debian ]] ; then
+        cat << EOF > /etc/apt/sources.list
+deb http://ftp.debian.org/debian/ $CODENAME main contrib non-free
+deb-src http://ftp.debian.org/debian/ $CODENAME main contrib non-free
+deb http://ftp.debian.org/debian/ $CODENAME-updates main contrib non-free
+deb-src http://ftp.debian.org/debian/ $CODENAME-updates main contrib non-free
+deb http://ftp.debian.org/debian $CODENAME-backports main contrib non-free
+deb-src http://ftp.debian.org/debian $CODENAME-backports main contrib non-free
+
+deb http://security.debian.org/ $CODENAME/updates main contrib non-free
+deb-src http://security.debian.org/ $CODENAME/updates main contrib non-free
+EOF
+    elif [[ $DISTRO == Ubuntu ]] ; then
+        cat << EOF > /etc/apt/sources.list
+###### Ubuntu Main Repos
+deb http://archive.ubuntu.com/ubuntu/ $CODENAME main restricted universe multiverse
+deb-src http://archive.ubuntu.com/ubuntu/ $CODENAME main restricted universe multiverse
+
+###### Ubuntu Update Repos
+deb http://archive.ubuntu.com/ubuntu/ $CODENAME-security main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu/ $CODENAME-updates main restricted universe multiverse
+deb http://archive.ubuntu.com/ubuntu/ $CODENAME-backports main restricted universe multiverse
+deb-src http://archive.ubuntu.com/ubuntu/ $CODENAME-security main restricted universe multiverse
+deb-src http://archive.ubuntu.com/ubuntu/ $CODENAME-updates main restricted universe multiverse
+deb-src http://archive.ubuntu.com/ubuntu/ $CODENAME-backports main restricted universe multiverse
+
+###### Ubuntu Partner Repo
+deb http://archive.canonical.com/ubuntu $CODENAME partner
+deb-src http://archive.canonical.com/ubuntu $CODENAME partner
+EOF
+    fi
+}
+
+
+
+function apt_sources_add() {
+    if [[ $CODENAME == jessie ]] && [[ ! -f /etc/apt/sources.list.d/snapshot.jessie.list ]]; then
+        cat << EOF > /etc/apt/sources.list.d/snapshot.jessie.list
+deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20190321T212815Z/ jessie main non-free contrib
+deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20190321T212815Z/ jessie-updates main non-free contrib
+deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20190321T212815Z/ jessie-backports main non-free contrib
+deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20190321T212815Z/ jessie/updates main non-free contrib
+deb-src [check-valid-until=no] http://snapshot.debian.org/archive/debian/20190321T212815Z/ jessie main non-free contrib
+deb-src [check-valid-until=no] http://snapshot.debian.org/archive/debian/20190321T212815Z/ jessie-updates main non-free contrib
+deb-src [check-valid-until=no] http://snapshot.debian.org/archive/debian/20190321T212815Z/ jessie-backports main non-free contrib
+deb-src [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20190321T212815Z/ jessie/updates main non-free contrib
+deb http://security.debian.org/ jessie/updates main contrib non-free
+deb-src http://security.debian.org/ jessie/updates main contrib non-free
+EOF
+        # [check-valid-until=no] doesn't work
+        echo 'Acquire::Check-Valid-Until 0;' > /etc/apt/apt.conf.d/10-no-check-valid-until
+        # apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 9D6D8F6BC857C906 8B48AD6246925553 7638D0442B90D010 CBF8D6FD518E17E1
+    elif [[ $DISTRO == Debian ]] && [[ $CODENAME != jessie ]] && [[ ! $(grep "$CODENAME-backports" /etc/apt/sources.list) ]] && [[ ! -f /etc/apt/sources.list.d/debian-backports.list ]] ; then
+        echo "deb http://ftp.debian.org/debian $CODENAME-backports main"     >> /etc/apt/sources.list.d/debian-backports.list
+        echo "deb-src http://ftp.debian.org/debian $CODENAME-backports main" >> /etc/apt/sources.list.d/debian-backports.list
+    fi
+}
+
+
+# From QuickBox Lite
+function APT_UPGRADE() {
+    rm -f /tmp/apt_status
+    set_log_when_there_is_none
+    [[ $APT_UPGRADE_SINGLE == 1 ]] && echo_task "Checking and performing updates to system ... "
+    apt_sources_add
+    DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update  >> $OutputLOG 2>&1
+    if [[ "$?" != 0 ]]; then
+        echo "apt_update_failed=1" > /tmp/apt_status
+        echo_error "Something wrong with your apt sources or network connection, exiting ..."
+        kill -s TERM $TOP_PID >> /dev/null 2>&1  ;   kill -s TERM $script_pid >> /dev/null 2>&1   ;   exit 1
+    fi
+    # if git is not found on apt source list, then we assume this source list is incorrect
+    apt policy git 2>&1 | grep -q http || {
+        echo "apt_update_failed=1" > /tmp/apt_status
+        echo_error "Something wrong with your apt sources or network connection, exiting ..."
+        kill -s TERM $TOP_PID >> /dev/null 2>&1  ;   kill -s TERM $script_pid >> /dev/null 2>&1   ;   exit 1
+    }
+    DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade >> $OutputLOG 2>&1
+    ## auto solve lock
+    if [ "$?" -eq 2 ]; then
+        echo_error "dpkg database is locked"
+        echo_task "Try to fix dpkg lock ... "
+        rm -f /var/lib/dpkg/updates/0*
+        locks=$(find /var/lib/dpkg/lock* && find /var/cache/apt/archives/lock*)
+        if [[ ${locks} == $(find /var/lib/dpkg/lock* && find /var/cache/apt/archives/lock*) ]]; then
+            for l in ${locks}; do
+                rm -rf ${l}
+            done
+            _execute "dpkg --configure -a"
+            DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" update  >> $OutputLOG 2>&1
+            DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade >> $OutputLOG 2>&1
+        fi
+        if ! (apt-get check >/dev/null); then
+            apt-get install -f >> $OutputLOG 2>&1
+            if ! (apt-get check >/dev/null); then
+                echo "apt_install_failed=1" > /tmp/apt_status
+                echo_error "It seems there is something error when using apt-get, exiting ..."
+                kill -s TERM $TOP_PID >> /dev/null 2>&1  ;   kill -s TERM $script_pid >> /dev/null 2>&1   ;   exit 1
+            fi
+        fi
+        status_done
+    else
+        [[ $APT_UPGRADE_SINGLE == 1 ]] && status_done
+        touch /tmp/apt.update.$(date "+%Y%m%d")
+    fi
+}
+
+
+function APT_UPGRADE_check() {
+    if [[ ! -f /tmp/apt.update.$(date "+%Y%m%d") ]]; then
+        APT_UPGRADE
+    fi
+}
+
+
+function apt_install_check() {
+    APT_UPGRADE_check
+    unset apt_install_list skip_list                                                                                # do not use local here
+    packages=("$@")                                                                                                 # arg=("$@") packages=("${arg[@]:1}")
+    [[ -z "$packages" ]] && echo "ERROR: No packages" | tee -a $OutputLOG && exit 1
+    for package_name in "${packages[@]}" ; do
+        if [ $(apt-cache show -q=0 $package_name 2>&1 | grep -c "No packages found") -eq 0 ]; then
+            if [ $(dpkg-query -W -f='${Status}' $package_name 2>/dev/null | grep -c "ok installed") -eq 0 ]; then   # Not installed yet
+                apt_install_list="$apt_install_list $package_name"
+            fi
+        else
+            skip_list="$skip_list $package_name"
+          # echo "$package_name not found, skipping" 2>&1 | tee -a "$OutputLOG"
+        fi
+    done
+    if [[ -n "$skip_list" ]]; then
+        echo -e "\n$skip_list not found, skipping" 2>&1 | tee -a "$OutputLOG"
+    fi
+}
+
+
+# apt_install_check aaa bbb ; apt_install_separate ; apt_install_check aaa bbb ; apt_install_check_after
+function apt_install_check_after() {
+    if [[ -n "$apt_install_list" ]]; then
+        echo -e "ERROR: It seems there are some packages failed installation" 2>&1 | tee -a "$OutputLOG"
+        exit 1
+    fi
+}
+
+
+function apt_install_together() {
+    rm -f /tmp/apt_status
+    # test -z "$apt_install_list" || apt-get -y install "$apt_install_list" >> "$OutputLOG" 2>&1
+    if [[ -n "$apt_install_list" ]]; then
+        # apt-get -y --allow-unauthenticated -f install "$apt_install_list" >> "$OutputLOG" 2>&1
+        eval DEBIAN_FRONTEND=noninteractive apt-get -y --allow-unauthenticated -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install "$apt_install_list" >> "$OutputLOG" 2>&1
+        if [ ! $? = 0 ]; then
+            echo "apt_install_failed=1" > /tmp/apt_status
+            echo_error_exit "Failed to install packages"
+        fi
+    fi
+}
+
+
+function apt_install_separate() {
+    rm -f /tmp/apt_status
+    if [[ -n "$apt_install_list" ]]; then
+        for package in $apt_install_list; do
+            DEBIAN_FRONTEND=noninteractive apt-get -y --allow-unauthenticated -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install $package >> "$OutputLOG" 2>&1
+            # || { echo | tee -a $OutputLOG ; echo_error "Failed to install $package" ; exit 1 ; }
+            if [ ! $? = 0 ]; then
+                echo "apt_install_failed=1" > /tmp/apt_status
+                echo -e "ERROR: Failed to install $package" 2>&1 | tee -a "$OutputLOG"
+                exit 1
+            fi
+        done
+    fi
+}
+
+
+function apt_install_dependencies() {
+    rm -f /tmp/apt_status
+    APT_UPGRADE_check
+    unset packages
+    packages=("$@")
+    [[ -z "$packages" ]] && echo "ERROR: No packages input" | tee -a $OutputLOG && exit 1
+    eval DEBIAN_FRONTEND=noninteractive apt-get -y --allow-unauthenticated -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" install "${packages[@]}" >> "$OutputLOG" 2>&1
+    if [ $? != 0 ]; then
+        echo "apt_install_failed=1" > /tmp/apt_status
+        echo_error "Failed to install dependencies"
+        kill -s TERM $TOP_PID >> /dev/null 2>&1  ;   kill -s TERM $script_pid >> /dev/null 2>&1   ;   exit 1
+    else
+        status_lock=$AppNameLower-d
+        echo "status_lock=$status_lock" > /tmp/Variables
+        rm -f /tmp/$status_lock.1.lock /tmp/$status_lock.2.lock
+        touch /tmp/$status_lock.1.lock
+        touch $LOCKLocation/$AppNameLower.dependencies.lock
+    fi
+}
+
+
+################################################################################################
+################################################################################################ download efs' deb
+################################################################################################
+
+
+# https://deb.ezapi.net/buster/binary-amd64/deluge/deluged_1.3.15-1build1_all.deb
+function deb-get-var-cf() {
+    DOMAIN="deb.ezapi.net"
+    SUBFOLDER=""
+    SUFFIX=""
+}
+
+# https://sourceforge.net/projects/seedbox-software-for-linux/files/buster/binary-amd64/deluge/deluged_1.3.15-1build1_all.deb/download
+function deb-get-var-sf() {
+    DOMAIN="sourceforge.net"
+    SUBFOLDER="projects/seedbox-software-for-linux/files/"
+    SUFFIX="/download"
+}
+
+# https://osdn.dl.osdn.net/storage/g/s/se/seedbox-software-for-linux/buster/binary-amd64/deluge/deluged_1.3.15-1build1_all.deb
+function deb-get-var-osdn() {
+    DOMAIN="osdn.dl.osdn.net"
+    SUBFOLDER="storage/g/s/se/seedbox-software-for-linux/"
+    SUFFIX=""
+}
+
+# https://github.com/amefs/quickbox-files/raw/master/buster/binary-amd64/deluge/deluged_1.3.15-1build1_all.deb
+# https://raw.githubusercontent.com/amefs/quickbox-files/master/buster/binary-amd64/deluge/deluged_1.3.15-1build1_all.deb
+function deb-get-var-gh() {
+    DOMAIN="github.com"
+    SUBFOLDER="amefs/quickbox-files/raw/master/"
+    SUFFIX=""
+}
+
+function deb-get-wget() {
+    if [[ $PACKAGE == "packages.lst" ]]; then
+        if [[ $DOMAIN == "deb.ezapi.net" ]]; then
+            wget -t3 -T20 -O /tmp/${PACKAGE} https://deb.ezapi.net/packages.lst >> $OutputLOG 2>&1
+        else
+            wget -t3 -T20 -O /tmp/${PACKAGE} https://${DOMAIN}/${SUBFOLDER}${PACKAGE} >> $OutputLOG 2>&1
+        fi
+    else
+        wget -t3 -T20 -O ${DEB} https://${DOMAIN}/${SUBFOLDER}${CODENAME}/binary-${ARCH}/${PACKAGE}/${DEB}${SUFFIX} >> $OutputLOG 2>&1
+    fi
+}
+
+function deb-get-fallback() {
+    echo -e "${red}Failed to download files from $DOMAIN${normal}\n" >> $OutputLOG
+}
+
+# deb-get  packages.lst
+# deb-get  deluge  deluge_2.0.3-1build1_all.deb   install
+function deb-get() {
+    set_log_when_there_is_none
+    local ARCH="amd64" ; local PACKAGE=$1 ; local DEB=$2 ; local ACTION=$3
+    deb-get-var-gh ; deb-get-wget
+    if [ $? -ne 0 ]; then
+        deb-get-fallback ; deb-get-var-cf ; deb-get-wget
+        if [ $? -ne 0 ]; then
+            deb-get-fallback ; deb-get-var-osdn ; deb-get-wget
+            if [ $? -ne 0 ]; then
+                deb-get-fallback ; deb-get-var-sf ; deb-get-wget
+                if [ $? -ne 0 ]; then
+                    echo_error_exit "deb-get failed to download files"
+                    rm -f ${DEB} ${PACKAGE} # remove the empty file when failing
+                fi
+            fi
+        fi
+    fi
+    if [[ -f ${DEB} ]] && [[ $ACTION == install ]]; then
+        if [[ $CODENAME == jessie ]]; then
+            dpkg    -i  ${DEB}   >> "$OutputLOG" 2>&1
+            apt-get -fy install  >> "$OutputLOG" 2>&1
+        else
+            apt-get -y --allow-unauthenticated -f install ./${DEB}  >> "$OutputLOG" 2>&1
+        fi
+        rm -f ${DEB}
+    fi
+}
+
+
+################################################################################################
+################################################################################################
+################################################################################################
+
+
+function PortCheck() {
+    ports=("$@")
+    for port in "${ports[@]}" ; do
+        if ss -ln | grep ':'$port'' | grep -q LISTEN ; then
+            echo_warning "Port $port is already in use"
+            port_used=1
+        fi
+    done
+}
+
+PortGenerator1() { portGen1=$(shuf -i 10001-32001 -n1) ; } ; portGenerator2() { portGen2=$(shuf -i 10001-32001 -n1) ; }
+PortCheck1()     { while ss -ln | grep ':'$portGen1'' | grep -q LISTEN ; do PortGenerator1 ; done ; }
+PortCheck2()     { while ss -ln | grep ':'$portGen2'' | grep -q LISTEN ; do PortGenerator2 ; done ; }
+
+function check_remote_git_repo_branch() {
+    local git_repo=$1
+    local git_branch=$2
+    [[ -z $(which git) ]] && { apt-get install -y git > /dev/null 2>&1 ; }
+    [[ -z $(which git) ]] && { echo -e "${CW} No git_found ${normal}"       ; rm -f /tmp/.lt.git.tag ; exit 1 ; }
+    [[ -z $git_repo   ]] && { echo -e "${CW} No git_repo input ${normal}"   ; rm -f /tmp/.lt.git.tag ; exit 1 ; }
+    [[ -z $git_branch ]] && { echo -e "${CW} No git_branch input ${normal}" ; rm -f /tmp/.lt.git.tag ; exit 1 ; }
+    rm -f /tmp/.lt.git.tag
+    git ls-remote --tags  $git_repo | awk '{print $NF}' >> /tmp/.lt.git.tag
+    git ls-remote --heads $git_repo | awk '{print $NF}' >> /tmp/.lt.git.tag
+    grep $git_branch /tmp/.lt.git.tag -q || { echo -e "${CW} No such branch/version on git!${normal}" | tee -a ${OutputLOG} ; rm -f /tmp/.lt.git.tag ; exit 1 ; }
+    rm -f /tmp/.lt.git.tag
+}
+
+
+################################################################################################
+################################################################################################ output-url-related functions
+################################################################################################
+
+
+function if_running () { ps -ef | grep -v grep | grep -q "$1" && echo "${green}Running ${normal}" || echo "${red}Inactive${normal}" ; }
+
+function check_install_1(){
+    local client_name=$1
+    client_location=$( command -v ${client_name} )
+    [[ "${client_name}" == "qbittorrent-nox"     ]] && client_name=qb
+    [[ "${client_name}" == "transmission-daemon" ]] && client_name=tr
+    [[ "${client_name}" == "deluged"  ]] && client_name=de
+    [[ "${client_name}" == "rtorrent" ]] && client_name=rt
+    [[ "${client_name}" == "flexget"  ]] && client_name=fg
+    if [[ -a $client_location ]]; then
+        eval "${client_name}"_installed=Yes
+    else
+        eval "${client_name}"_installed=No
+    fi
+}
+
+function check_install_2(){
+    [[ -e $LOCKLocation/filebrowser.lock      ]] &&  fb_installed=Yes ||  fb_installed=No
+    [[ -e $LOCKLocation/novnc.lock            ]] && vnc_installed=Yes || vnc_installed=No
+    [[ -e $LOCKLocation/vnstat.dashboard.lock ]] && vns_installed=Yes || vnc_installed=No
+
+    for app in qbittorrent-nox deluged rtorrent transmission-daemon flexget irssi rclone ffmpeg mediainfo wine mono; do
+        check_install_1 $app
+    done
+}
+
+function if_reverse() {
+    [[ $(systemctl is-active nginx 2>/dev/null) == active ]] && enable_reverse=1
+    if [[ $enable_reverse == 1 ]]; then
+        qbweb="/qbittorrent"
+        deweb="/deluge"
+        trweb="/transmission"
+        fgweb="/flexget"
+        fbweb="/filebrowser"
+        fdweb="/flood"
+        vncweb="/novnc"
+        sss="s"
+        if [[ $fg_installed == Yes ]]; then
+            sed -i "s/# base_url/  base_url/" /home/$iUser/.config/flexget/config.yml >> "$LogLocation/99.others.log" 2>&1
+            systemctl restart flexget@$iUser >> "$LogLocation/99.others.log" 2>&1
+        fi
+    else
+        qbweb=":2017"
+        deweb=":8112"
+        trweb=":9099"
+        fgweb=":6566"
+        fbweb=":7575"
+        fdweb=":3000"
+        vncweb=":6082/vnc.html"
+        sss=""
+    fi
+}
+
+function output_url() {
+    local installed=$1
+    local name=$2
+    local progress=$3
+    local suffix=$4
+    local need_password=$5
+    local status=$(if_running $progress)
+    if [[ -n $need_password ]]; then
+        local passurl="${iUser}:${iPass}@"
+    else
+        local passurl
+    fi
+    if [[ -n "$rt_domain" ]]; then
+        local serverurl="${rt_domain}"
+    else
+        local serverurl="${serveripv4}"
+    fi
+    [[ $progress =~ (rtorrent|nginx) ]] && local sss=s
+    if [[ $installed == Yes ]]; then
+        printf "%-31s %-21s %-99s\n" "${cyan} $name${normal}" "$status" "http${sss}://${passurl}${serverurl}${suffix}"
+    else
+        printf "%-31s %-30s %-99s\n" "${red} $name${normal}" "${bold}${baihongse} ERROR ${normal}" "${bold}${red}Installation FAILED${normal}"
+        export sth_failed=1
+        eval ${progress}_failed=1
+    fi
+}
+
+function show_uploaded_log () {
+    local up_log=$1
+    if [[ -f $up_log ]]; then
+        echo -e " $(cat $up_log | curl -s -F 'sprunge=<-' http://sprunge.us)"
+    else
+        echo -e " ${red}ERROR: Logfile $up_log NOT FOUND${yellow}"
+    fi
+}
+
+function END_output_url() {
+    if_reverse
+    echo -e " ${baiqingse}${bold}      INSTALLATION COMPLETED      ${normal} \n"
+    printf "%-75s\n" "-" | sed 's/\s/-/g'
+
+    [[ $qb_version    != no  ]] && output_url   $qb_installed   "qBittorrent WebUI"   qbittorrent         $qbweb
+    [[ $de_version    != no  ]] && output_url   $de_installed   "Deluge WebUI"        deluged             $deweb
+    [[ $tr_version    != no  ]] && output_url   $tr_installed   "Transmission WebUI"  transmission        $trweb        need_password
+    if [[ $rt_version != no  ]]; then
+                                   output_url   $rt_installed   "RuTorrent"           rtorrent            "/rutorrent"  need_password
+        [[ $rt_installed == Yes  ]] &&
+                                   output_url   $rt_installed   "h5ai File Indexer"   nginx               "/h5ai"       need_password
+        [[ $fd_installed == Yes  ]] &&
+                                   output_url   $fd_installed   "Flood"               npm                 $fdweb
+    fi
+    [[ $InsFlex       != No  ]] && output_url   $fg_installed   "FlexGet WebUI"       flexget             $fgweb
+    [[ $InsFB         == Yes ]] && output_url   $fb_installed   "FileBrowser"         filebrowser         $fbweb
+    [[ $InsVNC        == Yes ]] && output_url  $vnc_installed   "noVNC"               xfce                $vncweb
+    [[ $vns_installed == Yes ]] && output_url  $vns_installed   "Vnstat Dashboard"    vnstatd             "/vnstat"
+
+    echo
+    echo -e " ${cyan}Your Username${normal}         ${bold}${iUser}${normal}"
+    echo -e " ${cyan}Your Password${normal}         ${bold}${iPass}${normal}"
+    [[ $InsFlex != No ]] && [[ $fg_installed == Yes ]] &&
+    echo -e " ${cyan}FlexGet Login${normal}         ${bold}flexget${normal}"
+    printf "%-75s\n\n" "-" | sed 's/\s/-/g'
+
+    _time installation
+
+    if [[ -n $sth_failed ]]; then
+        echo -e "\n ${bold}Unfortunately something went wrong during installation."
+        echo -e " You can check logs by typing these commands or visit websites below:"
+        echo -e " ${yellow}cat $LogBase/installed.log"
+        [[ -n $qbittorrent_failed  ]] && show_uploaded_log  $LogLocation/install.qbittorrent.txt
+        [[ -n $deluged_failed      ]] && show_uploaded_log  $LogLocation/03.de1.log
+        [[ -n $transmission_failed ]] && show_uploaded_log  $LogLocation/08.tr1.log
+        [[ -n $rtorrent_failed     ]] && echo -e " $({ cat $LogLocation/07.rt.log 2>&1 ; lines2 ; cat $LogLocation/07.rtinst.script.log 2>&1 ; } | curl -s -F 'sprunge=<-' http://sprunge.us)"
+        [[ -n $npm_failed          ]] && show_uploaded_log  $LogLocation/07.flood.log
+        [[ -n $flexget_failed      ]] && show_uploaded_log  $LogLocation/install.flexget.txt
+        [[ -n $xfce_failed         ]] && show_uploaded_log  $LogLocation/install.novnc.txt
+        [[ -n $filebrowser_failed  ]] && show_uploaded_log  $LogLocation/install.filebrowser.txt
+        echo -ne "${normal}"
+    fi
+    echo
+}
+
+
+################################################################################################
+################################################################################################ pyenv functions
+################################################################################################
+
+
+# https://www.python.org/downloads/
+# pyenv_install_python 2.7.18 / 3.7.8 / 3.8.3
+function pyenv_install_python(){
+    local version=$1
+    major_version=$(echo ${version}| cut -d. -f1)
+    source /root/.bash_pyenv
+    versions=$(/opt/pyenv/bin/pyenv versions)
+    if [[ ! $versions =~ $version ]]; then
+        echo_task "Compiling Python $version ..."
+        _execute "/opt/pyenv/bin/pyenv install $version" & spinner $!
+        if [[ $(/opt/pyenv/versions/${version}/bin/python -V 2>&1 | grep -oE "[0-9.]+") == ${version} ]]; then
+            status_done
+        else
+            status_failed
+        fi
+        if [[ $major_version == 2 ]]; then
+            _execute "/opt/pyenv/versions/${version}/bin/python2 -m pip install virtualenv"
+          # echo -e "Python ${version} virtualenv installed"
+        fi
+    else
+        echo -e "Python ${version} already installed" | tee -a "$OutputLOG"
+    fi
+}
+
+
+# pyenv_init_venv      3.7.8   /opt/venv/flexget   $iUser
+function pyenv_init_venv() {
+    local version=$1
+    local path=$2
+    local user=$3
+    major_version=$(echo ${version}| cut -d. -f1)
+    mkdir -p $path
+    source /root/.bash_pyenv
+    if [[ ${major_version} == "2" ]]; then
+        _execute "/opt/pyenv/versions/${version}/bin/python2 -m virtualenv $path"
+    elif [[ ${major_version} == "3" ]]; then
+        _execute "/opt/pyenv/versions/${version}/bin/python3 -m venv $path"
+    fi
+    [[ -n $user ]] && chown -R ${user}.${user} $path
+}
+
+
+# python2 <(curl -s https://bootstrap.pypa.io/get-pip.py) --force-reinstall >> "$OutputLOG" 2>&1
+# python_getpip 2
+# python_getpip 3 $iHome/.local/flexget3 $iUser
+function python_getpip() {
+    local version=$1
+    local path=$2
+    local user=$3
+    major_version=$(echo ${version}| cut -d. -f1)
+    wget -O /tmp/get-pip.py https://bootstrap.pypa.io/get-pip.py >> "$OutputLOG" 2>&1
+    if [[ -n $path ]]; then
+        if [[ -n $user ]]; then
+            sudo -u ${user} -H bash -c "${path}/bin/python /tmp/get-pip.py --force-reinstall" >> "$OutputLOG" 2>&1
+        else
+            ${path}/bin/python /tmp/get-pip.py --force-reinstall >> "$OutputLOG" 2>&1
+        fi
+    else
+        if [[ ${major_version} == "2" ]]; then
+            python2 /tmp/get-pip.py --force-reinstall >> "$OutputLOG" 2>&1
+        elif [[ ${major_version} == "3" ]]; then
+            python3 /tmp/get-pip.py --force-reinstall >> "$OutputLOG" 2>&1
+        fi
+    fi
+}
+
+
+################################################################################################
+################################################################################################ Debug functions
+################################################################################################
+
+
+function debug_log_location() {
+    if [[ $debug == 1 ]]; then
+        echo
+        for i in LogRootPath LogTimes DebLocation SCLocation LogLocation LOCKLocation OutputLOG \
+                 compile_flag_threads git_repo git_branch AppName AppNameLower DebName Need_SourceCode pm_action \
+                 iUser iPass iHome iPort wPort port mode version version_s status_lock arch CODENAME ; do
+            echo -n "$i="
+            eval echo "$"$i""
+        done
+        echo
+        read -t 10
+    fi
+}
+
+function cat_outputlog() {
+    if [[ $show_log == 1 ]]; then
+        lines
+        echo -e "${bold}${OutputLOG}${normal}"
+        # lines           # Since OutputLOG has lines itself
+        cat ${OutputLOG}
+        read -ep "Tail ${OutputLOG}? " pasue
+        lines2
+        tail -f ${OutputLOG}
+        exit
+    fi
+}
+
+function set_log_when_there_is_none() {
+    [[ -z $OutputLOG ]] && OutputLOG=$HOME/.123.log
+}
+
+function lloogg() {
+    [[ $OutputLOG == "$HOME/.123.log" ]] && cat "$HOME/.123.log" && echo -e "\n${bold}${yellow}tail -200 $HOME/.123.log${normal}\n"
+}
+
+
+################################################################################################
+################################################################################################ To be done
+################################################################################################
+
+
+function get_clients_port() {
+    # [[ -z $iHome ]] && { echo -e "ERROR: Please specify user" ; exit 1 ; }
+    de_port=$(sed -rn 's/(.*)"daemon_port": (.*),/\2/p' $iHome/.config/deluge/core.conf 2>/dev/null | grep -oE "[0-9]+")
+    dw_port=$(sed -rn 's/(.*)"port": (.*),/\2/p' $iHome/.config/deluge/web.conf 2>/dev/null | grep -oE "[0-9]+")
+    qb_port=$(sed -rn 's|WebUI\\Port=||p' $iHome/.config/qBittorrent/qBittorrent.conf 2>/dev/null | grep -oE "[0-9]+")
+    qb_port_i=$(sed -rn 's|Connection\\PortRangeMin=||p' $iHome/.config/qBittorrent/qBittorrent.conf 2>/dev/null | grep -oE "[0-9]+")
+    tr_port=$(grep rpc-port $iHome/.config/transmission-daemon/settings.json 2>/dev/null | grep -oE "[0-9]+")
+    fg_port=$(grep "web_server" -A7 $iHome/.config/flexget/config.yml 2>/dev/null | grep -i port | grep -oE "[0-9]+")
+}
+
+function get_clients_version() {
+    de_installed_ver=$(deluged --version 2>/dev/null | grep deluge | awk '{print $2}' | grep -oE "[0-9].[0-9].[0-9]+")
+    qb_installed_ver=$(qbittorrent-nox --version 2>/dev/null | awk '{print $2}' | grep -oE "[0-9.]+")
+    tr_installed_ver=$(transmission-daemon --help 2>/dev/null | head -n1 | awk '{print $2}')
+    rt_installed_ver=$(rtorrent -h 2>/dev/null | head -n1 | sed -ne 's/[^0-9]*\([0-9]*\.[0-9]*\.[0-9]*\)[^0-9]*/\1/p')
+    lt_installed_ver=$(pkg-config --exists --print-errors "libtorrent-rasterbar >= 3.0.0" 2>&1 | awk '{print $NF}' | grep -oE [0-9]+.[0-9]+.[0-9]+)
+
+    libssl_ver=$(dpkg-query -W -f='${Version}' libssl-dev 2>&1 | grep -oE "[0-9].[0-9].[0-9]+" | head -1)
+    ffmpeg_ver=$(ffmpeg 2>&1 | head -n1 | awk '{print $3}')
+    irssi_ver=$(irssi --version 2>&1 | awk '{print $2}')
+    mi_ver=$(mediainfo --version 2>&1 | grep Lib | cut -c17-)
+    rclone_ver=$(rclone --version 2>&1 | head -n1 | awk '{print $2}' | sed "s/v//")
+    # find /usr/lib -name libtorrent-rasterbar* 2>/dev/null | grep -q libtorrent-rasterbar && lt_exist=yes
+}
+
+
+################################################################################################
+################################################################################################ Notes
+################################################################################################
+
+
+function some_info() {
+# https://github.com/Aniverse/rtinst/blob/master/scripts/rtsslcert#L50
+openssl req -x509 -nodes -days 3650 -subj /CN=$serverip -config /etc/ssl/ruweb.cnf \
+-newkey rsa:2048 -keyout /etc/ssl/private/ruweb.key -out /etc/ssl/ruweb.crt
+# https://github.com/Aniverse/rtinst/blob/master/scripts/rtinst#L629
+# calls the script rtsslcert to generate the ssl certificated for vsftpd and nginx
+rtsslcert -d
+# https://github.com/amefs/quickbox-lite/blob/master/setup.sh#L470
+}

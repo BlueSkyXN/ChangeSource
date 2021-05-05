@@ -1,0 +1,396 @@
+#!/bin/bash
+#
+# https://github.com/Aniverse/inexistence
+# Author: Aniverse
+#
+script_update=2020.07.15
+script_version=r11067
+
+################################################################################################ Debug
+
+usage_for_me() {
+    export local_packages=/etc/inexistence/00.Installation
+    export s=$local_packages/package/libtorrent-rasterbar
+    rm -f $s ; nano $s
+    bash $s -m deb3         --logbase $LogTimes
+    bash <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/package/libtorrent-rasterbar) -m deb3
+    bash <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/package/libtorrent-rasterbar) -b RC_1_2
+}
+
+################################################################################################ Get options
+
+unset LogRootPath LogTimes DebLocation SCLocation LOCKLocation OutputLOG
+
+AppName=libtorrent-rasterbar
+AppNameLower=libtorrent-rasterbar
+DebName=libtorrent-rasterbar
+Need_SourceCode=yes
+pm_action=install
+
+function show_usage() { echo "
+$AppName $pm_action $script_version ($script_update)
+Usage:
+      -m        Install mode, can only be specified as apt, deb, deb2, deb3 or source
+      -v        Specifiy which version of libtorrent-rasterbar to be installed
+      -b        Specifiy which branchn of libtorrent-rasterbar to be installed
+      -l        Specifiy LogBase (Not log file)
+      --log     Show logfile's content
+      --debug   Enable debug mode
+                Note that installing specific version may cause installation failure
+                or the version you installed is not compatible with the version of
+                your Deluge or qBittorrent"
+exit 1 ; }
+
+OPTS=$(getopt -o dm:v:b:l: --long debug,mode:,version:,branch:,logbase:,log -- "$@")
+[ ! $? = 0 ] && show_usage
+eval set -- "$OPTS"
+
+while [ -n "$1" ] ; do case "$1" in
+    -m | --mode         ) mode="$2"     ; shift 2 ;;
+    -v | --version      ) version="$2"  ; shift 2 ;;
+    -b | --branch       ) branch="$2"   ; shift 2 ;;
+    -l | --logbase      ) LogTimes="$2" ; shift 2 ;;
+    -d | --debug        ) debug=1       ; shift   ;;
+         --log          ) show_log=1    ; shift   ;;
+         --             ) shift         ; break   ;;
+esac ; done
+
+################################################################################################ Set Variables 1
+
+git_repo="https://github.com/arvidn/libtorrent"
+
+if [[ -f /etc/inexistence/00.Installation/function ]]; then
+    source /etc/inexistence/00.Installation/function
+else
+    source <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/function)
+fi
+
+set_variables_log_location
+check_var_OutputLOG
+debug_log_location
+cat_outputlog
+
+################################################################################################ Set Variables 2
+
+cancel() { echo -e "${normal}" ; rm -f /tmp/.lt.git.tag ; exit ; }
+trap cancel SIGINT
+
+[[ -z $mode ]] && [[ -n $version ]] && mode=source
+[[ -z $mode ]] && [[ -n $branch  ]] && mode=source
+[[ -z $mode ]] && echo -e "\n${CW} Installation mode must be specified as apt, deb, deb2, deb3 or source${normal}\n" && cancel
+
+# Transform version to branch (used for git clone tag)
+echo $version | grep -qEo "[012]\.[0-9]+\.[0-9]+" && branch=$( echo libtorrent-$version | sed "s/\./_/g" )
+[[ $version == 1.1.11 ]] && branch=libtorrent_1_1_11 # eggache
+[[ $version == 1.1.12 ]] && branch=libtorrent_1_1_12
+[[ $version == 1.2.0  ]] && branch=libtorrent_1_2_0
+
+[[ $mode == source ]] && [[ -z $branch ]] && { echo -e "\n${JG} No branch of libtorrent-rasterbar detected, force to use RC_1_1 branch ${normal}\n" ; branch=RC_1_1 ; version=1.1.13 ;  }
+[[ -n $branch ]] && check_remote_git_repo_branch  $git_repo  $branch
+
+# Use 6.6.6 when version cannot be determind
+[[ -n $branch ]] && [[ -z $version ]] && version=$( wget -qO- $git_repo/raw/$branch/include/libtorrent/version.hpp | grep LIBTORRENT_VERSION | tail -n1 | grep -oE "[0-9.]+\"" | sed "s/.0\"//" )
+[[ -n $branch ]] && [[ -z $version ]] && version=6.6.6
+
+if version_ge $version 1.2 ; then
+    CXXFLAGS="-std=c++14"
+else
+    CXXFLAGS="-std=c++11"
+fi
+
+################################################################################################
+
+
+
+
+
+# Install build dependencies for libtorrent-rasterbar
+function install_lt_dependencies() {
+    lines2 >> $OutputLOG
+    status_lock=$AppNameLower-d
+    echo "status_lock=$status_lock" > /tmp/Variables
+    rm -f /tmp/$status_lock.1.lock /tmp/$status_lock.2.lock
+
+    apt_install_check build-essential pkg-config autoconf automake libtool git                   \
+    libboost-dev libboost-system-dev libboost-chrono-dev libboost-random-dev libboost-python-dev \
+    geoip-database libgeoip-dev libssl-dev zlib1g-dev
+
+    apt_install_separate && touch /tmp/$status_lock.1.lock # || touch /tmp/$status_lock.2.lock
+
+    [[ -f /tmp/$status_lock.1.lock ]] && touch $LOCKLocation/$AppNameLower.dependencies.lock
+    echo >> $OutputLOG
+}
+
+
+
+
+
+# Install from source codes
+function install_lt_source() {
+
+    lines2 >> $OutputLOG
+    status_lock=$AppNameLower
+    echo "status_lock=$status_lock" > /tmp/Variables
+    rm -f /tmp/$status_lock.1.lock /tmp/$status_lock.2.lock
+
+    [[ -d libtorrent-rasterbar-$version ]] && rm -rf $AppNameLower-$version
+    git clone --depth=1 -b $branch $git_repo $AppNameLower-$version >> $OutputLOG 2>&1
+    cd $AppNameLower-$version
+
+    # See here for details: https://github.com/qbittorrent/qBittorrent/issues/6383
+    if [[ $CODENAME =~ (jessie|xenial) ]] ; then
+        if version_ge $version 1.2 ; then
+            sleep 0 # wait
+        elif version_ge $version 1.1 ; then
+            if [[ -f $local_packages/package/libtorrent-rasterbar/RC_1_1.patch ]] ;then
+                cp -f $local_packages/package/libtorrent-rasterbar/RC_1_1.patch .
+            else
+                wget -nv https://sourceforge.net/projects/inexistence/files/patch/lt.1.1.cpp11.patch/download -O RC_1_1.patch >> $OutputLOG 2>&1
+            fi
+            patch -p1 < RC_1_1.patch >> $OutputLOG 2>&1
+        elif version_ge $version 1.0 ; then
+            if [[ -f $local_packages/package/libtorrent-rasterbar/RC_1_0.patch ]] ;then
+                cp -f $local_packages/package/libtorrent-rasterbar/RC_1_0.patch .
+            else
+                wget -nv https://sourceforge.net/projects/inexistence/files/patch/lt.1.0.cpp11.patch/download -O RC_1_0.patch >> $OutputLOG 2>&1
+            fi
+            patch -p1 < RC_1_0.patch >> $OutputLOG 2>&1
+        else
+            sed -i "s/+ target_specific(),/+ target_specific() + ['-std=c++11'],/" bindings/python/setup.py || NoPatch=1
+        fi
+    fi
+
+    # From QuickBox
+    version=$(grep -oE "AC_INIT\(\[libtorrent-rasterbar\],.*" configure.ac | grep -oE "[0-9.]+" | head -1)
+    # From Swizzin
+    # version=$(cat Makefile | grep -i package_version\ \= | cut -d= -f2 | sed 's/ //g')  
+
+    ./autotool.sh >> $OutputLOG 2>&1
+
+    ./configure --enable-python-binding --with-libiconv \
+                --disable-debug --enable-encryption --with-libgeoip=system \
+                  CXXFLAGS=$CXXFLAGS  >> $OutputLOG 2>&1 
+                # For both Deluge and qBittorrent
+
+    if [[ $version == 1.1* ]]; then
+        sed -i 's|, (arg("seconds") = 0, arg("tracker_idx") = -1, arg("flags") = 0|, (arg("seconds") = 0, arg("tracker_idx") = -1, arg("flags") = 1|g' bindings/python/src/torrent_handle.cpp
+    elif [[ $version == 1.2* ]]; then
+        sed -i 's|static constexpr reannounce_flags_t ignore_min_interval = 0_bit|static constexpr reannounce_flags_t ignore_min_interval = 1_bit|g' include/libtorrent/torrent_handle.hpp
+    fi
+
+    make -j$MAXCPUS  >> $OutputLOG 2>&1
+    rm -rf $SCLocation/tmp-$AppNameLower
+    mkdir -p /usr/local/include/libtorrent
+
+    if [[ -n $(which fpm) ]]; then
+        make install     DESTDIR=$SCLocation/tmp-$AppNameLower  >> $OutputLOG 2>&1
+        mv $SCLocation/tmp-libtorrent-rasterbar/usr/local/lib/python2.7/site-packages \
+           $SCLocation/tmp-libtorrent-rasterbar/usr/local/lib/python2.7/dist-packages
+        fpm -C $SCLocation/tmp-$AppNameLower -n $DebName -v $version \
+            -p $DebLocation/$DebName-$version-$CODENAME-$arch.deb \
+            -s dir -t deb -a native -m aniverse -f --description \
+            "a feature complete C++ bittorrent implementation, installed by inexistence" \
+            >> $OutputLOG 2>&1
+        dpkg -i $DebLocation/$DebName-$version-$CODENAME-$arch.deb >> $OutputLOG 2>&1 &&
+        touch /tmp/$status_lock.1.lock || touch /tmp/$status_lock.2.lock
+    else
+        make install >> $OutputLOG 2>&1 &&
+        touch /tmp/$status_lock.1.lock || touch /tmp/$status_lock.2.lock
+        mv /usr/local/lib/python2.7/site-packages \
+           /usr/local/lib/python2.7/dist-packages
+    fi
+
+    # [[ -f /tmp/$status_lock.1.lock ]] && touch $LOCKLocation/$AppNameLower.lock
+    [[ -f /tmp/$status_lock.1.lock ]] && touch $LOCKLocation/$AppNameLower.source.$branch.lock
+    echo >> $OutputLOG
+
+}
+
+
+
+
+
+# Install from pre-compiled deb package (libtorrent-rasterbar8, based on RC_1_0 #62c96797a06a024dc17a44931c19afe6f7bd7d6c with python-binding fix)
+function install_lt8_deb() {
+    lines2 >> $OutputLOG
+    status_lock=$AppNameLower
+    echo "status_lock=$status_lock" > /tmp/Variables
+    rm -f /tmp/$status_lock.1.lock /tmp/$status_lock.2.lock
+
+    [[ $CODENAME =~ (buster|focal) ]] && { echo -e "Error: No libtorrent 1.0.11 deb package for Debian 10/Ubuntu 20.04 LTS, please use libtorrent 1.1 or later." ; exit 1 ; }
+    wget -O lt.$CODENAME.1.0.11.deb -nv https://sourceforge.net/projects/inexistence/files/backup/deb/libtorrent-rasterbar-1.0.11.$CODENAME.amd64.deb/download >> $OutputLOG 2>&1
+    dpkg -i lt.$CODENAME.1.0.11.deb >> $OutputLOG 2>&1 && touch /tmp/$status_lock.1.lock || touch /tmp/$status_lock.2.lock
+
+    echo >> $OutputLOG
+    # [[ -f /tmp/$status_lock.1.lock ]] && touch $LOCKLocation/$AppNameLower.lock
+    [[ -f /tmp/$status_lock.1.lock ]] && touch $LOCKLocation/$AppNameLower.deb.lock
+}
+
+
+
+
+
+# Install from pre-compiled deb package
+# libtorrent-rasterbar9, based on RC_1_1 6f1250c6535730897909240ea0f4f2a81937d21a
+# with python-binding fix (from amefs) and #5a48292aefd6ebffd5be6b237081ba2d978a2caa fix (Announce only once to private trackers, by Airium)
+function install_lt9_deb() {
+    lines2 >> $OutputLOG
+    status_lock=$AppNameLower
+    echo "status_lock=$status_lock" > /tmp/Variables
+    rm -f /tmp/$status_lock.1.lock /tmp/$status_lock.2.lock
+
+    wget -O lt.$CODENAME.1.1.13.deb -nv https://sourceforge.net/projects/inexistence/files/backup/deb/libtorrent-rasterbar-1.1.13.1.$CODENAME.amd64.cpp11.deb/download >> $OutputLOG 2>&1
+    dpkg -i lt.$CODENAME.1.1.13.deb >> $OutputLOG 2>&1 && touch /tmp/$status_lock.1.lock || touch /tmp/$status_lock.2.lock
+
+    echo >> $OutputLOG
+    # [[ -f /tmp/$status_lock.1.lock ]] && touch $LOCKLocation/$AppNameLower.lock
+    [[ -f /tmp/$status_lock.1.lock ]] && touch $LOCKLocation/$AppNameLower.deb.lock
+}
+
+
+
+
+
+# Install from pre-compiled deb package, build by amefs
+function install_lt9_deb2() {
+    lines2 >> $OutputLOG
+    status_lock=$AppNameLower
+    echo "status_lock=$status_lock" > /tmp/Variables
+    rm -f /tmp/$status_lock.1.lock /tmp/$status_lock.2.lock
+
+    [[ $CODENAME == buster ]] && apt-get install -y --allow-downgrades libgeoip-dev=1.6.12-1 libgeoip1=1.6.12-1 >> $OutputLOG 2>&1
+    list="libtorrent-rasterbar9_1.1.14-1build1_amd64.deb
+          libtorrent-rasterbar-dev_1.1.14-1build1_amd64.deb
+          python-libtorrent_1.1.14-1build1_amd64.deb
+          python3-libtorrent_1.1.14-1build1_amd64.deb"
+    mkdir -p /tmp/lt_deb
+    cd /tmp/lt_deb
+    for deb in $list ; do
+        deb-get libtorrent-rasterbar $deb install
+    done
+    cd ; rm -rf /tmp/lt_deb
+    touch /tmp/$status_lock.1.lock
+
+    echo >> $OutputLOG
+}
+
+
+
+
+
+function purge_old_libtorrent() {
+    if [[ -f $LOCKLocation/$AppNameLower.lock ]]; then
+        echo_task "Uninstalling pre-installed libtorrent-rasterbar ..."
+        echo >> $OutputLOG
+        dpkg_list="libtorrent-rasterbar libtorrent-rasterbar7 libtorrent-rasterbar8 libtorrent-rasterbar9 libtorrent-rasterbar10 libtorrent-rasterbar-dev python-libtorrent python3-libtorrent"
+        for package in dpkg_list; do
+            apt-get purge -y $package  >> $OutputLOG 2>&1
+            dpkg -r $package           >> $OutputLOG 2>&1
+        done
+        status_done
+    fi
+}
+
+
+
+
+
+function install_lt_dependencies_action() {
+    if [[ ! -f $LOCKLocation/libtorrent-rasterbar.dependencies.lock ]]; then
+        echo_task "Installing libtorrent-rasterbar build dependencies ..."
+        install_lt_dependencies & spinner $!
+        check_status $status_lock
+    fi
+    purge_old_libtorrent
+}
+
+
+
+
+
+################################################################################################
+
+
+
+
+
+case $mode in
+    deb     ) install_lt_dependencies_action ; version=1.0.11
+              echo_task "Installing libtorrent-rasterbar ${bold}${cyan}$version${normal} from pre-compiled deb package ..."
+              install_lt8_deb & spinner $!
+              ;;
+
+    deb2    ) install_lt_dependencies_action ; version=1.1.13
+              echo_task "Installing libtorrent-rasterbar ${bold}${cyan}$version${normal} from pre-compiled deb package ..."
+              install_lt9_deb & spinner $!
+              ;;
+
+    deb3    ) version=1.1.14
+              echo_task "Installing libtorrent-rasterbar ${bold}${cyan}$version${normal} from pre-compiled deb package ..."
+              install_lt9_deb2 & spinner $!
+              ;;
+
+    source  ) install_base fpm
+              install_lt_dependencies_action
+
+              if echo $branch | grep -qEo "[012]_[0-9]_[0-9]+"; then
+                  echo_task "Installing libtorrent-rasterbar ${bold}${cyan}$version${normal} from source codes ..."
+              else
+                  echo_task "Installing libtorrent-rasterbar ${bold}$branch branch (${cyan}$version${jiacu})${normal} from source codes ..."
+              fi
+
+              install_lt_source & spinner $!
+              ;;
+esac
+
+cd ; ldconfig
+
+status_lock=$AppNameLower
+ltver_py=$(python -c "import libtorrent ; print libtorrent.version" 2>&1 | grep -oE [0-9]+.[0-9]+.[0-9]+)
+ltver=$(pkg-config --exists --print-errors "libtorrent-rasterbar >= 3.0.0" 2>&1 | awk '{print $NF}' | grep -oE [0-9]+.[0-9]+.[0-9]+)
+
+if [[ -f /tmp/$status_lock.1.lock ]]; then
+    if [[ -z $ltver_py ]]; then
+        echo -e " ${red}${bold}ERROR: no python-libtorrent!${normal}" | tee -a $OutputLOG
+    elif [[ $ltver != $version ]]; then
+        echo -e " ${red}${bold}ERROR: $ltver is installed rather than $version${normal}" | tee -a $OutputLOG
+    else
+        echo -e " ${green}${bold}DONE${normal}" | tee -a $OutputLOG
+        touch $LOCKLocation/$AppNameLower.lock
+    fi
+elif [[ -f /tmp/$status_lock.2.lock ]]; then
+    echo -e " ${red}${bold}FAILED${normal}" | tee -a $OutputLOG
+else
+    echo -e " ${red}${bold}Unknown State${normal}" | tee -a $OutputLOG
+fi
+
+
+
+
+###################### deprecated ######################
+
+function deprecated_codes() {
+
+    # Random number for marking different installations
+    [[ $mode == source ]] && RN=$(shuf -i 1-999 -n1)
+
+    # Check if input branch exists
+    [[ ! -z $branch ]] && [[ ! $( wget -qO- "https://github.com/arvidn/libtorrent" | grep data-name | cut -d '"' -f2 | grep -P "$branch\b" ) ]] && { echo -e "\n${CW} No such branch!\n" ; exit 1 ; }
+
+    if [[ -n $(which checkinstalll) ]]; then
+        apt-cache show libtorrent-rasterbar | grep inexistence -q && dpkg -r libtorrent-rasterbar
+        mkdir -p doc-pak && echo "an efficient feature complete C++ bittorrent implementation, installed by inexistence" > description-pak
+        checkinstall -y --pkgname=libtorrent-rasterbar --pkggroup libtorrent --pkgversion $version >> $OutputLOG 2>&1 && touch /tmp/lt.1.lock || touch /tmp/lt.2.lock
+    fi
+
+    if [[ -z $NoPatch ]]; then
+        ./configure --enable-python-binding --with-libiconv \
+                    --disable-debug --enable-encryption --with-libgeoip=system CXXFLAGS=-std=c++11  >> $OutputLOG 2>&1 # For both Deluge and qBittorrent
+    else
+        ./configure --enable-python-binding --with-libiconv \
+                    --disable-debug --enable-encryption --with-libgeoip=system                      >> $OutputLOG 2>&1
+    fi
+
+}
+
+########################################################

@@ -1,0 +1,134 @@
+#!/bin/bash
+#
+# https://github.com/Aniverse/inexistence
+# Author: Aniverse
+
+script_update=2020.03.05
+script_version=r10006
+
+################################################################################################ Debug
+
+usage_for_debug() {
+    export local_packages=/etc/inexistence/00.Installation
+    export s=$local_packages/package/wine/install
+    rm -f $s ; nano $s ; bash $s
+    bash <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/package/wine/install)
+}
+
+################################################################################################ Get options
+
+unset AppName AppNameLower Need_SourceCode pm_action \
+      LogRootPath LogTimes DebLocation SCLocation LOCKLocation OutputLOG
+
+AppName=wine
+AppNameLower=wine
+Need_SourceCode=no
+pm_action=install
+
+function show_usage() { echo "
+$AppName $pm_action $script_version ($script_update)
+Usage:
+      -l        Specifiy LogBase
+      -d        Enable debug mode
+      --log     Show logfile's content"
+exit 1 ; }
+
+OPTS=$(getopt -o v:l:d -al version:,debug,logbase:,log -- "$@")
+[ ! $? = 0 ] && show_usage
+eval set -- "$OPTS"
+
+while [ -n "$1" ] ; do case "$1" in
+    -v | --version      ) version="$2"  ; shift 2 ;;
+    -l | --logbase      ) LogTimes="$2" ; shift 2 ;;
+    -d | --debug        ) debug=1       ; shift   ;;
+         --log          ) show_log=1    ; shift   ;;
+    -- ) shift ; break ;;
+esac ; done
+
+################################################################################################ Set Variables
+
+if [[ -f /etc/inexistence/00.Installation/function ]]; then
+    source /etc/inexistence/00.Installation/function
+else
+    source <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/function)
+fi
+
+set_variables_log_location
+check_var_OutputLOG
+debug_log_location
+cat_outputlog
+
+################################################################################################
+
+
+
+
+
+# https://wiki.winehq.org/Debian
+# https://wiki.winehq.org/Ubuntu
+
+function install_wine() {
+
+    echo >> $OutputLOG
+
+    dpkg --add-architecture i386 >> $OutputLOG 2>&1
+  # wget -O- https://dl.winehq.org/wine-builds/Release.key | apt-key add - >> $OutputLOG
+  # apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 76F1A20FF987672F >> $OutputLOG
+    wget -nv https://dl.winehq.org/wine-builds/winehq.key -O /tmp/winehq.key >> $OutputLOG 2>&1
+    apt-key add /tmp/winehq.key >> $OutputLOG 2>&1
+    rm -f /tmp/winehq.key
+
+  # if [[ $DISTRO == Ubuntu ]]; then
+  #     apt-add-repository -y https://dl.winehq.org/wine-builds/ubuntu/ >> $OutputLOG 2>&1
+  # elif [[ $DISTRO == Debian ]]; then
+    [[ $CODENAME != focal ]] &&
+        echo "deb https://dl.winehq.org/wine-builds/$DISTROL/ $CODENAME main" > /etc/apt/sources.list.d/wine.list
+  # fi
+
+    # https://forum.winehq.org/viewtopic.php?f=8&t=32192
+    # Fix missing FAudio on Debian 10 and Ubuntu 18.04
+    if [[ $CODENAME == buster ]]; then
+        #mkdir -p /tmp/wine && cd /tmp/wine
+        #wget -nv https://download.opensuse.org/repositories/Emulators:/Wine:/Debian/xUbuntu_18.04/amd64/libfaudio0-dbgsym_19.07-0~bionic_amd64.ddeb >> $OutputLOG 2>&1
+        #wget -nv https://download.opensuse.org/repositories/Emulators:/Wine:/Debian/xUbuntu_18.04/amd64/libfaudio0_19.07-0~bionic_amd64.deb >> $OutputLOG 2>&1
+        #apt-get install -y ./libfaudio0-dbgsym_19.07-0~bionic_amd64.ddeb ./libfaudio0_19.07-0~bionic_amd64.deb >> $OutputLOG 2>&1
+        #cd && rm -rf /tmp/wine
+        wget -nv https://download.opensuse.org/repositories/Emulators:/Wine:/Debian/Debian_10/Release.key -O /tmp/opensuse.key >> $OutputLOG 2>&1
+        apt-key add /tmp/opensuse.key >> $OutputLOG 2>&1
+        rm -f /tmp/opensuse.key
+        echo "deb https://download.opensuse.org/repositories/Emulators:/Wine:/Debian/Debian_10 ./" > /etc/apt/sources.list.d/opensuse.wine.list
+    elif [[ $CODENAME == bionic ]]; then
+        #mkdir -p /tmp/wine && cd /tmp/wine
+        #wget -nv https://download.opensuse.org/repositories/Emulators:/Wine:/Debian/Debian_10/amd64/libfaudio0-dbgsym_20.01-0~buster_amd64.deb >> $OutputLOG 2>&1
+        #wget -nv https://download.opensuse.org/repositories/Emulators:/Wine:/Debian/xUbuntu_18.04/amd64/libfaudio0_19.07-0~bionic_amd64.deb >> $OutputLOG 2>&1
+        #apt-get install -y ./*.deb >> $OutputLOG 2>&1
+        #cd && rm -rf /tmp/wine
+        wget -nv https://download.opensuse.org/repositories/Emulators:/Wine:/Debian/xUbuntu_18.04/Release.key -O /tmp/opensuse.key >> $OutputLOG 2>&1
+        apt-key add /tmp/opensuse.key >> $OutputLOG 2>&1
+        rm -f /tmp/opensuse.key
+        echo "deb https://download.opensuse.org/repositories/Emulators:/Wine:/Debian/xUbuntu_18.04/ ./" > /etc/apt/sources.list.d/opensuse.wine.list
+    fi
+
+    APT_UPGRADE
+    apt_install_check winehq-stable
+    apt_install_separate # && touch /tmp/$status_lock.1.lock || touch /tmp/$status_lock.2.lock     # --install-recommends
+
+    wget -nv -N https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks -O /usr/local/bin/winetricks >> $OutputLOG 2>&1
+    chmod 755 /usr/local/bin/winetricks >> $OutputLOG 2>&1
+
+    status_lock=$AppNameLower
+    echo "status_lock=$status_lock" > /tmp/Variables
+    rm -f /tmp/$status_lock.1.lock /tmp/$status_lock.2.lock 
+    which wine > /dev/null && touch /tmp/$status_lock.1.lock || touch /tmp/$status_lock.2.lock
+    [[ -f /tmp/$status_lock.1.lock ]] && touch $LOCKLocation/$AppNameLower.lock
+    echo >> $OutputLOG
+
+}
+
+
+
+
+
+echo_task "Installing $AppName ..."
+install_wine & spinner $!
+check_status $status_lock

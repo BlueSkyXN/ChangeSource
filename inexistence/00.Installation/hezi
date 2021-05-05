@@ -1,0 +1,139 @@
+#!/bin/bash
+#
+# https://github.com/Aniverse/inexistence
+# Author: Aniverse
+
+script_update=2020.07.15
+script_version=r11019
+script_name=hezi
+
+################################################################################################ Debug
+
+usage_for_debug() {
+    bash <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/hezi)
+    s=/etc/inexistence/00.Installation/hezi;rm -f $s ; nano $s ; chmod 755 $s
+}
+
+################################################################################################ Set Variables 1
+
+if [[ -d /etc/inexistence/00.Installation ]]; then
+    source /etc/inexistence/00.Installation/function
+    source /etc/inexistence/00.Installation/ask
+    source /etc/inexistence/00.Installation/options
+else
+    source <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/function)
+    source <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/ask)
+    source <(wget -qO- https://github.com/Aniverse/inexistence/raw/master/00.Installation/options)
+fi
+
+################################################################################################ Set Variables 2
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:$PATH
+export TZ=/usr/share/zoneinfo/Asia/Shanghai
+export DEBIAN_FRONTEND=noninteractive
+export APT_LISTCHANGES_FRONTEND=none
+export local_packages=/etc/inexistence/00.Installation
+export local_script=/usr/local/bin/abox
+
+export iBranch=master
+export times=0
+export LogBase=/log/inexistence
+export LogTimes=$LogBase/$times
+export SCLocation=$LogTimes/source
+export DebLocation=$LogTimes/deb
+export LogLocation=$LogTimes/log
+export LOCKLocation=$LogBase/.lock
+export WebROOT=/var/www
+
+export MAXCPUS=$(nproc)
+export script_lang=chs
+export_inexistence_info
+
+################################################################################################
+
+function show_usage () {
+    echo -e "${bold}${yellow}hezi $script_version ($script_update)${normal}
+这是一个用于管理盒子的脚本，目前支持的用法有：
+hezi buchong = 盒子补充 —————— 补充安装软件
+hezi gengxin = 盒子更新 —————— 更新脚本到最新版（尚未完善）"
+}
+
+function possible_usage () {
+    hezi anzhuang rclone wine mono --de 1.3.15 --qb 4.2.5 --rt 0.9.8   # 批量安装软件
+    hezi anzhuang deluge 1.3.15        # 安装 Deluge 1.3.15，同时会为所有 inexistence 脚本创建的用户创建配置文件和开机自启等
+    hezi xiezai deluge                 # 卸载 Deluge，也会清除所有配置文件
+    hezi adduser someone               # 同时也会配置已安装的软件
+    hezi deluser someone               # 清空 home 目录，删除所有配置，关闭所有相关进程
+    hezi mima someone 12345678         # 把用户 someone 的所有密码（SSH/软件 webui 密码/RPC 密码）修改成 12345678
+    hezi rizhi                         # 出现日志菜单，让用户选择查看哪个软件的日志
+    hezi                               # 直接输入 hezi，出现菜单，让用户选择做什么（可以考虑用 whiptail）
+}
+
+################################################################################################
+
+ACTION=$1
+
+function ask_if_install () {
+    script_cmd="hezi buchong"
+    arg=("$@")
+    ExtraArgs=("${arg[@]:1}")
+    OPTS=$(getopt -o dsyu:p:b:h --long "qb-source,help,hostname:,domain:,no-reboot,quick,branch:,yes,skip,no-system-upgrade,debug,no-source-change,swap,no-swap,bbr,no-bbr,flood,vnc,x2go,wine,mono,tools,filebrowser,no-filebrowser,flexget,no-flexget,rclone,enable-ipv6,tweaks,no-tweaks,mt-single,mt-double,mt-all,mt-half,tr-deb,eng,chs,sihuo,user:,password:,webpass:,de:,qb:,rt:,tr:,lt:,qb-static,separate" -- "${ExtraArgs[@]}")
+    [ ! $? = 0 ] && show_inex_usage
+    eval set -- "$OPTS"
+    opts_action "${ExtraArgs[@]}"
+
+    set_language
+    check_install_2
+    get_clients_version
+    mkdir -p $LogBase/$times
+    
+    if [[ -z $iPass ]]; then
+        create_user=1
+        ask_username
+        ask_password
+    fi
+    
+    # password needed
+    ask_qbittorrent
+    ask_deluge
+    ask_transmission
+    ask_rtorrent
+    ask_flexget
+    ask_filebrowser
+    ask_rdp
+    # password not needed
+    ask_wine
+    ask_mono
+    ask_rclone
+    ask_tools
+    
+    if_need_lt=0
+    [[ $qb_version != No ]] && [[ -z $qb_mode ]] && if_need_lt=1
+    [[ $de_version != No ]] && if_need_lt=1
+    [[ $if_need_lt == 1 ]] && [[ -z $lt_version ]] && lt_version=RC_1_1
+    
+    if [[ $create_user == 1 ]]; then
+        hezi_add_user $iUser $iPass
+    fi
+}
+
+function update_inexistence () {
+    echo -e "${bold}更新中 ... ${normal}"
+    cd /etc/inexistence
+    git reset --hard origin/master
+    git pull
+    # wget -q https://github.com/Aniverse/inexistence/raw/master/00.Installation/alias    -O /etc/inexistence/00.Installation/alias
+    # wget -q https://github.com/Aniverse/inexistence/raw/master/00.Installation/function -O /etc/inexistence/00.Installation/function
+    sed -i "s/iUser/$iUser/g" $local_packages/s-alias
+    chmod 755 -R $local_packages
+    chmod 644 /usr/local/bin/s-alias
+    echo -e "${bold}大概更新完了${normal}"
+}
+
+################################################################################################
+
+case $ACTION in
+    buchong     ) ask_if_install "$@" ; do_installation ;;
+    gengxin     ) update_inexistence ;;
+    *           ) show_usage ;;
+esac
