@@ -817,11 +817,11 @@ function get_app_static () {
         fi
         if   [[ $app == smartctl ]] && [[ ! -x $app_cmd ]]; then
             echo -e "Installing $app static builds to $app_cmd ..."
-            wget https://github.com/Aniverse/inexistence-files/raw/master/binary/amd64/$app -qO $app_cmd
+            wget https://raw.githubusercontent.com/BlueSkyXN/ChangeSource/master/inexistence/inexistence-files/binary/amd64/$app -qO $app_cmd
             chmod 755 $app_cmd
         elif [[ $app != smartctl ]] && [[ -z $(which $app) ]]; then
             echo -e "Installing $app static builds to $app_cmd ..."
-            wget https://github.com/Aniverse/inexistence-files/raw/master/binary/amd64/$app -qO $app_cmd
+            wget https://raw.githubusercontent.com/BlueSkyXN/ChangeSource/master/inexistence/inexistence-files/binary/amd64/$app -qO $app_cmd
             chmod 755 $app_cmd
         fi
     else
