@@ -142,7 +142,7 @@ io_bench() {
     if [[ $test_iops == 1 ]] || [[ $raidcard == NVMe ]]; then
         [[ $EUID != 0 ]] && echo -e "  ${JG} 建议使用 root 权限来运行本脚本的 fio 测试！${normal}\n"
         [[ $raidcard == NVMe ]] && echo -e "  ${ZY} 检测到你使用的是 NVMe 硬盘，使用 fio 代替 dd 进行测试${normal}\n"
-        bash <(wget -qO- https://github.com/amefs/fio-bench/raw/master/fio-bench_zh-cn.sh -o /dev/null) -o /tmp/fio-bench.txt
+        bash <(wget -qO- https://raw.githubusercontent.com/BlueSkyXN/ChangeSource/master/fiobench.sh -o /dev/null) -o /tmp/fio-bench.txt
       # echo -ne "${yellow}${bold}" ; cat /tmp/fio-bench.txt | tail -n +2 | sed "s/Test Item/测试项目 /" | sed -e "s|^|  |"
       # cat /tmp/fio-bench.txt | tail -n +2 | sed -r -e "s/Test Item/${cyan}测试项目${normal} /" -e "s|^|  |" -e "s|(\b[0-9.]+\b)|${yellow}\1${normal}|g" -e "s|([GMK]B/s)|${yellow}\1${normal}|g" -e "s/([读写速IP][取入度OS])/${cyan}\1${normal}/g" -e "s/-Q32T1/${cyan}-Q32T1${normal}/g" -e "s/4K/${cyan}4K${normal}/g" -e "s/Seq/${cyan}Seq${normal}/g"
       # echo -e "${normal}"
