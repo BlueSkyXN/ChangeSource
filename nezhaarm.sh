@@ -33,11 +33,11 @@ pre_check() {
 
     ## os_arch
     if [[ $(uname -m | grep 'x86_64') != "" ]]; then
-        os_arch="amd64"
+        os_arch="arm"
     elif [[ $(uname -m | grep 'i386\|i686') != "" ]]; then
-        os_arch="386"
+        os_arch="arm"
     elif [[ $(uname -m | grep 'aarch64\|armv8b\|armv8l') != "" ]]; then
-        os_arch="arm64"
+        os_arch="arm"
     elif [[ $(uname -m | grep 'arm') != "" ]]; then
         os_arch="arm"
     fi
