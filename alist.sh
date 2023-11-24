@@ -1,4 +1,5 @@
 #!/bin/bash
+# wget -O alist.sh https://cdn.jsdelivr.net/gh/BlueSkyXN/ChangeSource/alist.sh && chmod +x alist.sh && clear && ./alist.sh install 
 
 # INSTALL_PATH='/opt/alist'
 VERSION='latest'
