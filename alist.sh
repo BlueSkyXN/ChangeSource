@@ -98,6 +98,7 @@ INSTALL() {
   esac
   # 下载 Alist 程序
   echo -e "\r\n${GREEN_COLOR}下载 Alist $VERSION ...${RES}"
+  echo -e "\r\n${GH_PROXY}https://github.com/alist-org/alist/releases/latest/download/alist-linux-musl-$ARCH.tar.gz"
   curl -L ${GH_PROXY}https://github.com/alist-org/alist/releases/latest/download/alist-linux-musl-$ARCH.tar.gz -o /tmp/alist.tar.gz $CURL_BAR
   tar zxf /tmp/alist.tar.gz -C $INSTALL_PATH/
 
