@@ -1,6 +1,16 @@
 #!/bin/bash
+#························································································································
+# 【安装Alist】
 # wget -O alist.sh https://cdn.jsdelivr.net/gh/BlueSkyXN/ChangeSource/alist.sh && chmod +x alist.sh && clear && ./alist.sh install 
+# wget -O alist.sh https://fastly.jsdelivr.net/gh/BlueSkyXN/ChangeSource/alist.sh && chmod +x alist.sh && clear && ./alist.sh install 
+# wget -O alist.sh https://gcore.jsdelivr.net/gh/BlueSkyXN/ChangeSource/alist.sh && chmod +x alist.sh && clear && ./alist.sh install 
+# wget -O alist.sh https://testingcf.jsdelivr.net/gh/BlueSkyXN/ChangeSource/alist.sh && chmod +x alist.sh && clear && ./alist.sh install 
 # wget -O alist.sh https://raw.githubusercontent.com/BlueSkyXN/ChangeSource/master/alist.sh && chmod +x alist.sh && clear && ./alist.sh install 
+#························································································································
+# 【刷新脚本缓存】
+# curl https://purge.jsdelivr.net/gh/BlueSkyXN/ChangeSource/alist.sh
+#························································································································
+
 
 
 # INSTALL_PATH='/opt/alist'
