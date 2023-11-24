@@ -105,7 +105,7 @@ INSTALL() {
   case "$choice" in
     1) GH_PROXY="https://mirror.ghproxy.com/";;
     2) GH_PROXY="";;
-    3) GH_PROXY="";;
+    3) GH_PROXY="https://gh.api.99988866.xyz/";;
     *) echo "无效的选择"; exit 1;;
   esac
   # 下载 Alist 程序
