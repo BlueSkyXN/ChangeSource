@@ -88,7 +88,7 @@ INSTALL() {
   echo "请选择一个 GitHub 代理："
   echo "1) https://mirror.ghproxy.com/"
   echo "2) Github官方源"
-  echo "3) Github官方源"
+  echo "3) https://gh.api.99988866.xyz/"
   read -p "输入你的选择（1-3）：" choice
   case "$choice" in
     1) GH_PROXY="https://mirror.ghproxy.com/";;
@@ -97,8 +97,8 @@ INSTALL() {
     *) echo "无效的选择"; exit 1;;
   esac
   # 下载 Alist 程序
-  echo -e "\r\n${GREEN_COLOR}下载 Alist $VERSION ...${RES}"
-  echo -e "\r\n${GH_PROXY}https://github.com/alist-org/alist/releases/latest/download/alist-linux-musl-$ARCH.tar.gz"
+  echo -e "\r\n${GREEN_COLOR} 下载 Alist $VERSION ...${RES}"
+  echo -e "\r\n${GREEN_COLOR} 你当前正在下载 ${GH_PROXY}https://github.com/alist-org/alist/releases/latest/download/alist-linux-musl-$ARCH.tar.gz"
   curl -L ${GH_PROXY}https://github.com/alist-org/alist/releases/latest/download/alist-linux-musl-$ARCH.tar.gz -o /tmp/alist.tar.gz $CURL_BAR
   tar zxf /tmp/alist.tar.gz -C $INSTALL_PATH/
 
